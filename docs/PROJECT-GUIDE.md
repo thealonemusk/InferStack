@@ -203,11 +203,18 @@ understand serving rather than benchmarking.
 ### 2.6 Preemption — where latency spikes come from
 
 When the KV cache fills up, vLLM must evict something. It **preempts** running
-sequences, by one of two strategies:
+sequences. Historically there were two strategies:
 
 - **Recompute** — throw the KV cache away, recompute it later from the prompt.
   Cheap for short sequences.
 - **Swap** — move KV blocks out to CPU RAM and back. Cheaper for long ones.
+
+**Important currency detail, confirmed the hard way on this project:** vLLM's
+**V1 engine** — the default since 0.8 — **removed CPU swap entirely.
+Preemption is now recompute-only**, and `--swap-space` no longer exists as a
+CLI flag. If you describe vLLM preemption as "swap or recompute" in 2026, you
+are describing V0. Say *recompute-only in V1*, and you will sound current
+rather than like you read a two-year-old blog post.
 
 Either way, a preempted request's latency spikes. **If you see mysterious p99
 blowups under load, look at the preemption counter first.** A throughput graph
@@ -465,6 +472,30 @@ there's a regression test named for it.
 Every later phase inherits this definition — an error here wouldn't show up as a
 failure, it would show up as a plausible, wrong graph.
 
+### 7.6 A flag that had been valid for years was gone
+
+The first real GPU run got all the way through — vLLM installed, InferStack
+installed from git, profiles resolved from the wheel, hardware validation passed
+on a real 2× T4 — and then died in one line:
+
+```
+vllm: error: unrecognized arguments: --swap-space 4
+```
+
+vLLM's V1 engine removed CPU swap, so the flag was deleted. My launcher had been
+written against V0's flag set. **No unit test could have caught this** — the
+mock didn't know what vLLM 0.29 accepts, because only vLLM 0.29 knows that.
+
+*Fix:* the launcher now reads the installed engine's own `vllm serve --help` and
+reports which of its flags are unsupported, saving the help text as an artifact.
+Stripping is recorded, never silent — a removed flag changes what was measured,
+so the artifact carries the original argv, the adjusted argv, and what was
+dropped.
+*Lesson:* **ask the binary, don't maintain a version table.** And more
+generally: integration points against fast-moving dependencies need a real
+integration test, because that is the one category of bug mocks structurally
+cannot find.
+
 ---
 
 ## 8. Questions you will get, and how to answer
@@ -527,12 +558,21 @@ failure, it would show up as a plausible, wrong graph.
 > are good practice on any hardware.
 
 **"What would you do differently?"**
-> Ship the packaging test earlier. Three of the four real bugs were
-> configuration and packaging problems, not algorithmic ones — a profile label
-> overridden by the environment, profiles missing from the wheel, a validator
-> trusting an unreliable API field. In a measurement system, the plumbing around
-> the measurement is where the dangerous bugs live, because they produce
-> plausible wrong answers instead of crashes.
+> Get to a real integration run sooner. Most of the bugs I hit were
+> configuration, packaging and version-drift problems rather than algorithmic
+> ones — a profile label overridden by the environment, profiles missing from
+> the wheel, a validator trusting an unreliable API field, a vLLM flag deleted
+> between major versions. Unit tests found none of those, because mocks agree
+> with whatever you assumed. In a measurement system the plumbing *around* the
+> measurement is where the dangerous bugs live, since they produce plausible
+> wrong answers instead of crashes.
+
+**"How do you handle a fast-moving dependency like vLLM?"**
+> Don't encode its interface as an assumption. My launcher originally emitted
+> `--swap-space`, which V1 removed when preemption became recompute-only. Now it
+> reads the installed binary's own `--help`, reports unsupported flags, and
+> records any it strips into the run artifact — because a dropped flag changes
+> what was measured, so that can never be silent.
 
 **"Is it finished?"**
 > No. Phases 0 and 1's infrastructure are done and the remote GPU path is
