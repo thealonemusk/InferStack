@@ -225,6 +225,7 @@ pre-commit install  # run both on every commit
 
 - **[Project guide](docs/PROJECT-GUIDE.md)** — theory, architecture, and how to defend every decision
 - **[Integration guide](docs/INTEGRATION.md)** — plugging this into an existing workflow
+- **[CONTEXT.md](CONTEXT.md)** — full state snapshot: decisions, measured results, gotchas, next steps
 - [Phase 0 — Foundations](docs/phases/phase-00-foundations.md)
 - [Phase 1 — Baseline serving](docs/phases/phase-01-baseline-serving.md) — including the three runs it took, and why each failure was real
 - [Architecture decision records](docs/adr/)
