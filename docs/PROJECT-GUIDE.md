@@ -275,7 +275,7 @@ surprising amount:
 | Feature | Needs | T4 (SM 7.5) | Consequence for this project |
 |---|---|---|---|
 | `bfloat16` | SM 8.0 | ❌ | Profiles pin `float16` explicitly |
-| FlashAttention-2 | SM 8.0 | ❌ | Falls back to XFormers/FlashInfer — must be recorded with every result |
+| FlashAttention-2 | SM 8.0 | ❌ | Falls back to **TRITON_ATTN** *(measured)* — must be recorded with every result |
 | Marlin int4 kernels | SM 8.0 | ❌ | AWQ/GPTQ run on slower generic kernels |
 | Native FP8 | SM 8.9 | ❌ | **Phase 6 is int4, not FP8** |
 
@@ -358,7 +358,7 @@ methodology, not a workaround — say it that way.
 | Phase | Deliverable | Status |
 |---|---|---|
 | 0 | Foundations: profiles, hardware probe, config, ADRs | ✅ done |
-| 1 | vLLM serving under every profile + batching proof | 🔨 in progress |
+| 1 | vLLM serving + continuous batching proven on hardware | ✅ done |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache util | |
 | 4 | Benchmark harness: Poisson arrivals, sweeps, p50/p95/p99 | |
@@ -377,26 +377,44 @@ next one depends on it.
 
 ## 6. Current status — be precise about this
 
-**Built and committed, 11 commits, 120 tests, lint clean:**
+Phases 0 and 1 are complete. Every component below has now run on real
+hardware, not just against mocks.
 
-| Component | Verified how |
+**Measured on Kaggle, 19 Sep 2026** — Tesla T4 (SM 7.5, 15 GB), vLLM 0.29.0,
+Qwen2.5-1.5B-Instruct in float16:
+
+| Measurement | Value |
 |---|---|
-| Profiles, config, hardware probe, compat checks | Unit tests + run on real hardware |
-| `launcher.py` — argv construction, process supervision | **Unit tests only** |
-| `client.py` — TTFT/ITL/TPOT timing | **Mock transport only** |
-| `smoke.py` — batching verdict | **Fake client only** |
-| `remote/kaggle.py` — Kaggle automation | ✅ **Proven on real hardware** |
+| TTFT (single request) | 26 ms |
+| TPOT (single request) | 14.6 ms/token |
+| 1 request, end to end (64 tokens) | 0.95 s |
+| 8 concurrent requests, wall clock | 1.04 s |
+| **Speedup over serial** | **7.3× (91% of the 8× ceiling)** |
+| Output throughput | 493 tok/s |
+| TTFT p50 / p95 under load | 59 ms / 61 ms |
+| Attention backend | TRITON_ATTN (no FA2 on SM 7.5) |
+| KV cache | 8.62 GiB → 322,944 tokens → 78.84× concurrency |
 
-**Measured on a real Kaggle session:** 2× Tesla T4, SM 7.5, 15 GB each, CUDA
-12.8, internet reachable, 31 GB RAM.
+**How to present that number.** Eight requests arriving together finished in
+1.04 s when one alone took 0.95 s. That is continuous batching: they decoded in
+a single running batch rather than queueing. It is 91% of the theoretical 8×,
+and the engine reported capacity for **78.84×** — so the batch was barely
+one-tenth full. The remaining 9% is scheduling overhead and the prefill of eight
+prompts competing for one step.
 
-**Not yet done:** a model has not yet been served end-to-end. The first real run
-is what turns the middle three rows from "believed correct" into "known
-correct".
+Also worth volunteering: TTFT went from **26 ms alone to 59 ms p50 under load**.
+Even a batch this small costs something at the head of the queue. That is the
+latency-throughput trade-off showing up at the smallest possible scale — and
+pointing at it yourself is far stronger than being asked.
 
-> **If asked "is it finished?" — say no, and say exactly this much.** Being
-> precise about what is proven versus what is merely written is the single most
-> credible thing you can do. Overstating it is the one thing that will sink you.
+**Still not done, and say so:** only one concurrency point was measured, so
+there are no percentile curves yet. The `local-cpu` profile has never run a real
+vLLM. Tensor parallelism is untested. Phases 2–9 — gateway, observability,
+benchmark harness, tuning — are ahead.
+
+> Being precise about what is proven versus what is merely written is the single
+> most credible thing you can do. Overstating it is the one thing that will sink
+> you.
 
 ---
 
@@ -496,6 +514,32 @@ generally: integration points against fast-moving dependencies need a real
 integration test, because that is the one category of bug mocks structurally
 cannot find.
 
+### 7.7 The fix that caused a worse failure than the bug
+
+Having been burned by a deleted flag, I made the launcher read
+`vllm serve --help` and strip anything unsupported. On the next run that help
+invocation printed a bare usage line listing only `--help`, because the model
+positional was missing.
+
+One flag is not zero flags. So the validator concluded that the other ten — host,
+port, dtype, max-model-len, max-num-seqs, everything — were unsupported, and
+stripped them all. The engine launched as a bare `vllm serve <model>` on
+defaults.
+
+I had explicitly written that an *empty* result means "unknown, never nothing
+supported" — and then failed to apply the same reasoning to an *implausible*
+result. **A validator that fails open is worse than no validator**, because it
+corrupts a command line that was already correct.
+
+*Fix:* a plausibility threshold, plus several probe invocations, one of which
+supplies a placeholder model positional. If none returns a credible help text,
+nothing is stripped.
+*Payoff:* on the successful run it parsed 372 flags and stripped exactly one —
+`--device`, which V1 also removed. Without it, that run would have failed the
+same way the first one did.
+*Lesson:* **safety mechanisms need their own failure analysis.** Ask what your
+guard does when its input is garbage, not just when its input is missing.
+
 ---
 
 ## 8. Questions you will get, and how to answer
@@ -535,6 +579,15 @@ cannot find.
 > cache grows per token per sequence, and it fragments badly. That's the problem
 > PagedAttention solves by treating the KV cache like OS virtual memory — fixed
 > blocks and a block table instead of contiguous per-sequence allocation.
+
+**"Walk me through your results."**
+> On a free-tier T4, one request took 0.95 s end to end with a 26 ms TTFT.
+> Eight concurrent requests took 1.04 s — 7.3× better than serving them
+> serially, 91% of the theoretical ceiling. The engine reported capacity for
+> 78.84× concurrency, so the batch was about a tenth full; that headroom is what
+> Phase 5 maps. Worth noting the cost side too: TTFT rose from 26 ms alone to
+> 59 ms p50 under load, which is the latency-throughput trade-off at the
+> smallest possible scale.
 
 **"How do you know your numbers are real?"**
 > Three ways. The measurement definitions are pinned in code with regression

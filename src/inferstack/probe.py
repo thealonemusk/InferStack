@@ -21,7 +21,7 @@ import psutil
 
 # Minimum CUDA compute capability for each feature we care about.
 SM_BFLOAT16 = (8, 0)  # Ampere and newer
-SM_FLASH_ATTN_2 = (8, 0)  # vLLM's FA2 backend; older cards fall back to XFormers
+SM_FLASH_ATTN_2 = (8, 0)  # vLLM's FA2 backend; T4 selects TRITON_ATTN instead (measured)
 SM_MARLIN_INT4 = (8, 0)  # fast AWQ/GPTQ kernels; SM 7.5 uses slower generic kernels
 SM_FP8_NATIVE = (8, 9)  # Ada / Hopper FP8 tensor cores
 
@@ -296,8 +296,10 @@ def _evaluate_cuda(report: EnvironmentReport) -> None:
     if not caps["flash_attention_2"]:
         report.notes.append(
             f"Compute capability {primary.sm} is below 8.0, so vLLM's FlashAttention-2 "
-            "backend is unavailable and it falls back to XFormers/FlashInfer. Record "
-            "which attention backend was active alongside every benchmark result."
+            "backend is unavailable. Measured on vLLM 0.29 / T4: it selects TRITON_ATTN "
+            "(candidates were TRITON_ATTN and FLEX_ATTENTION). Record which attention "
+            "backend was active alongside every benchmark result - results are not "
+            "comparable across backends."
         )
     if not caps["fp8_quantization"]:
         report.notes.append(
