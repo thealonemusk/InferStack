@@ -1,0 +1,174 @@
+{
+  "phase": 1,
+  "branch": "phase-01-baseline-serving",
+  "profile": "colab-t4",
+  "steps": {
+    "install": {
+      "ok": true,
+      "seconds": 279.0,
+      "vllm_version": "0.29.0"
+    },
+    "doctor": {
+      "environment": {
+        "platform": "Linux",
+        "platform_release": "6.12.90+",
+        "python_version": "3.12.13",
+        "in_wsl": false,
+        "in_container": true,
+        "cpu": {
+          "model": "Intel(R) Xeon(R) CPU @ 2.00GHz",
+          "cores": 2,
+          "threads": 4,
+          "flags": [
+            "avx",
+            "avx2",
+            "avx512bw",
+            "avx512f",
+            "f16c"
+          ]
+        },
+        "memory": {
+          "ram_total_gb": 31.35,
+          "ram_available_gb": 30.25,
+          "disk_free_gb": 19.5
+        },
+        "gpus": [
+          {
+            "index": 0,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          },
+          {
+            "index": 1,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          }
+        ],
+        "docker_available": false,
+        "capabilities": {
+          "cuda": true,
+          "tensor_parallel": true,
+          "bfloat16": false,
+          "flash_attention_2": false,
+          "int4_marlin": false,
+          "fp8_quantization": false
+        },
+        "warnings": [
+          "Tesla T4 is compute capability 7.5: no bfloat16 support. Set engine.dtype=float16 explicitly - leaving it on 'auto' will make vLLM refuse to load a bf16 checkpoint."
+        ],
+        "notes": [
+          "Compute capability 7.5 is below 8.0, so vLLM's FlashAttention-2 backend is unavailable and it falls back to XFormers/FlashInfer. Record which attention backend was active alongside every benchmark result.",
+          "No native FP8 tensor cores. Phase 6 quantisation should target AWQ or GPTQ int4 rather than FP8.",
+          "Marlin int4 kernels need compute capability 8.0+. AWQ/GPTQ still run here, on the slower generic kernels - factor that into any quantisation speedup claim.",
+          "2 GPUs visible: tensor_parallel_size up to 2 is testable in Phase 6.",
+          "15 GB of VRAM. A ~1.5B model in float16 leaves plenty of room for KV cache, which is what actually stresses continuous batching. Prefer a small model with a large batch over a large model."
+        ],
+        "recommended_profile": "kaggle-2xt4"
+      },
+      "issues": [
+        {
+          "severity": "info",
+          "field": "engine.backend",
+          "message": "FlashAttention-2 is unavailable on this GPU generation."
+        }
+      ]
+    },
+    "engine_command": [
+      "vllm",
+      "serve",
+      "Qwen/Qwen2.5-1.5B-Instruct",
+      "--served-model-name",
+      "qwen2.5-1.5b",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8000",
+      "--device",
+      "cuda",
+      "--dtype",
+      "float16",
+      "--max-model-len",
+      "4096",
+      "--max-num-seqs",
+      "256",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--enable-chunked-prefill"
+    ],
+    "supported_flag_count": 372,
+    "stripped_flags": [
+      "--device"
+    ],
+    "engine_command_final": [
+      "vllm",
+      "serve",
+      "Qwen/Qwen2.5-1.5B-Instruct",
+      "--served-model-name",
+      "qwen2.5-1.5b",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8000",
+      "--dtype",
+      "float16",
+      "--max-model-len",
+      "4096",
+      "--max-num-seqs",
+      "256",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--enable-chunked-prefill"
+    ],
+    "serve": {
+      "ok": true,
+      "startup_seconds": 137.5
+    },
+    "smoke": {
+      "model": "qwen2.5-1.5b",
+      "served_models": [
+        "qwen2.5-1.5b"
+      ],
+      "concurrency": 8,
+      "max_tokens": 64,
+      "error": null,
+      "baseline": {
+        "ok": true,
+        "error": null,
+        "status_code": 200,
+        "finish_reason": "length",
+        "prompt_tokens": 53,
+        "completion_tokens": 64,
+        "ttft_s": 0.02600666099999671,
+        "tpot_s": 0.014625569587301759,
+        "e2e_s": 0.9479832179999903,
+        "output_tokens_observed": 64
+      },
+      "wall_clock_s": 1.0392,
+      "serial_estimate_s": 7.5839,
+      "batching_speedup": 7.3,
+      "verdict": "requests are batched, well short of saturation",
+      "successes": 8,
+      "failures": 0,
+      "output_tokens": 512,
+      "output_throughput_tok_s": 492.7,
+      "ttft_s": {
+        "p50": 0.05915564499991888,
+        "p95": 0.061102645000005396
+      },
+      "tpot_s": {
+        "median": 0.015509122801586634
+      },
+      "errors": []
+    }
+  },
+  "ok": true,
+  "total_seconds": 497.0
+}

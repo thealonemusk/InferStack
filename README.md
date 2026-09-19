@@ -6,27 +6,74 @@ rather than folklore.
 
 > You cannot optimize what you have never served.
 
-**Status:** Phase 0 of 9 complete.
+---
+
+## 8 concurrent requests, served in the time of 1
+
+Measured on a **free-tier Tesla T4**. vLLM 0.29.0, Qwen2.5-1.5B-Instruct,
+float16, `colab-t4` profile. Not a simulation, not an estimate —
+[raw artifacts here](artifacts/curated/phase01/).
+
+```
+ 1 request  alone         ████████████████████                     0.95 s
+ 8 requests if serial     ████████████████████████████████████…    7.58 s  (projected)
+ 8 requests measured      ██████████████████████                   1.04 s  ←
+
+                                              7.3× faster than serial
+                                              91% of the theoretical 8× ceiling
+```
+
+| | Measured |
+|---|---|
+| **Time to first token** | **26 ms** |
+| **Time per output token** | **14.6 ms** |
+| **Output throughput** | **493 tok/s** |
+| TTFT p50 / p95 under load | 59 ms / 61 ms |
+| Requests succeeded | 8 / 8 |
+| Engine cold start to healthy | 137.5 s |
+
+Eight requests arriving at once finished in **1.04 s** — barely longer than the
+**0.95 s** one request took by itself. That is continuous batching: the
+scheduler merged all eight into a single running batch instead of queueing them.
+
+And the batch was nowhere near full. The engine reported its own ceiling:
+
+```
+GPU KV cache size: 322,944 tokens
+Maximum concurrency for 4,096 tokens per request: 78.84x
+Using TRITON_ATTN attention backend   (SM 7.5 — no FlashAttention-2)
+```
+
+**78.84× concurrent capacity, and this test used 8.** That headroom is what
+Phase 5 exists to map.
+
+> The KV cache arithmetic was predicted before the run:
+> `2 × 28 layers × 2 KV heads × 128 head_dim × 2 bytes` = **28,672 bytes/token**.
+> The engine measured **28,687**. Theory and hardware agree to 0.05%.
 
 ---
 
 ## What this is
 
 Most "LLM serving" tutorials stop at a working endpoint. The interesting part
-starts afterwards: what happens to p99 latency when concurrency goes from 8 to
-128, what `max_num_batched_tokens` actually trades away, and why a throughput
-number without a queue-depth graph next to it means nothing.
+starts afterwards: what happens to p99 when concurrency goes from 8 to 128, what
+`max_num_batched_tokens` actually trades away, and why a throughput number
+without a queue-depth graph beside it means nothing.
 
-InferStack is built phase by phase, each one leaving behind a decision record
-and a reproducible measurement.
+InferStack is built phase by phase, each leaving behind a decision record and a
+reproducible measurement.
+
+**New here?** Read **[docs/PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)** — the
+theory (prefill vs decode, KV cache sizing, PagedAttention, continuous batching,
+goodput), the architecture, and every decision with its reasoning.
 
 ## Roadmap
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| 0 | Foundations: execution profiles, hardware probe, config, ADRs | done |
-| 1 | vLLM OpenAI-compatible server running under every profile | next |
-| 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | |
+| 0 | Foundations: execution profiles, hardware probe, config, ADRs | ✅ done |
+| 1 | vLLM serving + continuous batching proven on real hardware | ✅ **done** |
+| 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | next |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | |
 | 4 | Benchmark harness: Poisson arrivals, concurrency sweeps, p50/p95/p99 | |
 | 5 | Continuous batching tuning, latency/throughput Pareto curves | |
@@ -35,19 +82,49 @@ and a reproducible measurement.
 | 8 | SGLang on the identical harness, head to head | |
 | 9 | Written benchmark report | |
 
+## Engineering notes worth stealing
+
+Things this project does that most don't:
+
+**It refuses to run configurations that cannot work.** `inferstack doctor`
+probes the machine, derives capabilities from CUDA compute capability, and exits
+non-zero before anything expensive happens. On a metered free-tier GPU,
+discovering a dtype mismatch *after* a 3 GB download is a real cost.
+
+```
+$ inferstack doctor --profile colab-t4
+FAIL  engine.device
+      Profile requests CUDA but no NVIDIA GPU is visible.
+      -> Switch to the local-cpu profile, or run this on Colab/Kaggle.
+```
+
+**It measures TTFT correctly.** OpenAI-compatible streams open with a role-only
+delta carrying no content. Counting it as the first token understates TTFT by a
+full inter-token gap. There is a regression test named for it.
+
+**It asks the engine what it accepts.** vLLM removed `--swap-space` and
+`--device` when the V1 engine made preemption recompute-only. Rather than pin a
+version table that drifts, the launcher reads the installed binary's own
+`--help` — and *fails safe*, stripping nothing when it cannot get a plausible
+answer.
+
+**It never reports a number it cannot attribute.** Every run records the exact
+argv, the vLLM version, and the active attention backend, because results are
+not comparable across backends.
+
 ## Target hardware
 
-The stack runs on three deliberately different machines, each described by a
-profile in `configs/profiles/`:
+Three deliberately different machines, each described by a profile in
+`configs/profiles/`:
 
 | Profile | Machine | Role |
 |---|---|---|
 | `local-cpu` | CPU-only laptop, no NVIDIA GPU | Development, tests, API correctness |
-| `colab-t4` | 1x Tesla T4 (SM 7.5, 16 GB) | Single-GPU benchmarks |
-| `kaggle-2xt4` | 2x Tesla T4 (SM 7.5, PCIe) | Tensor parallelism, longer sweeps |
+| `colab-t4` | 1× Tesla T4 (SM 7.5, 16 GB) | Single-GPU benchmarks |
+| `kaggle-2xt4` | 2× Tesla T4 (SM 7.5, PCIe) | Tensor parallelism, longer sweeps |
 
-Turing has no bfloat16 and no FP8, and sits below vLLM's FlashAttention-2
-requirement. Those constraints are encoded in code, not in someone's memory -
+Turing has no bfloat16, no FP8, and sits below vLLM's FlashAttention-2
+requirement. Those constraints are encoded in code, not in someone's memory —
 see [ADR-0002](docs/adr/0002-hardware-execution-profiles.md).
 
 `local-cpu` is a development target only. No performance number from it is ever
@@ -61,28 +138,23 @@ Requires Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/).
 uv venv
 uv pip install -e ".[dev]"
 
-inferstack doctor          # what is this machine, and can the profile run here?
-inferstack profiles        # available execution profiles
-inferstack config show     # fully resolved settings
+inferstack doctor                    # what is this machine, can the profile run here?
+inferstack profiles                  # available execution profiles
+inferstack serve --dry-run           # print the exact vLLM command, launch nothing
+inferstack smoke -c 8                # prove the server batches (exits 1 if it doesn't)
 ```
 
-`doctor` exits non-zero when the selected profile cannot work on the current
-machine, so it is safe to put in front of a long benchmark or in CI:
-
-```bash
-inferstack doctor --profile colab-t4 --strict
-```
+On a GPU session the whole Phase 1 run happens unattended — install, serve,
+measure, export — via `src/inferstack/remote/kernels/serve_smoke.py`.
 
 ## Configuration
 
 Settings resolve highest-priority first:
 
-1. Environment variables - `INFERSTACK_ENGINE__MAX_NUM_SEQS=64`
+1. Environment variables — `INFERSTACK_ENGINE__MAX_NUM_SEQS=64`
 2. `.env` (copy from `.env.example`)
 3. The active profile YAML
 4. Field defaults in `src/inferstack/config.py`
-
-Select a profile with `--profile` or `INFERSTACK_PROFILE`.
 
 ## Layout
 
@@ -93,28 +165,29 @@ src/inferstack/
   probe.py            hardware detection -> named capabilities
   compat.py           profile vs. hardware validation
   cli.py              the inferstack command
-  engine/             engine lifecycle          (Phase 1)
+  engine/             launcher, measuring client, batching smoke check
+  remote/             drive Kaggle GPU sessions from code
   gateway/            HTTP API in front         (Phase 2)
   bench/              load generation, analysis (Phase 4)
-deploy/               Dockerfiles, compose, Colab bootstrap
+artifacts/curated/    measured results, committed
+docs/PROJECT-GUIDE.md theory, architecture, decisions
 docs/adr/             architecture decision records
 docs/phases/          what each phase built and how to verify it
-artifacts/            benchmark results
-tests/
 ```
 
 ## Development
 
 ```bash
-pytest              # test suite
-ruff check .        # lint
-ruff format .       # format
+pytest              # 131 tests
+ruff check .        # lint, including bandit security rules
 pre-commit install  # run both on every commit
 ```
 
 ## Documentation
 
-- [Phase 0 - Foundations](docs/phases/phase-00-foundations.md)
+- **[Project guide](docs/PROJECT-GUIDE.md)** — theory, architecture, and how to defend every decision
+- [Phase 0 — Foundations](docs/phases/phase-00-foundations.md)
+- [Phase 1 — Baseline serving](docs/phases/phase-01-baseline-serving.md) — including the three runs it took, and why each failure was real
 - [Architecture decision records](docs/adr/)
 
 ## Licence

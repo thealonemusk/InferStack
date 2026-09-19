@@ -1,0 +1,13 @@
+(EngineCore pid=281) INFO 09-19 16:42:01 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore pid=281) INFO 09-19 16:42:26 [utils.py:306] Using LBNHC KV cache layout.
+(EngineCore pid=281) INFO 09-19 16:42:46 [monitor.py:53] torch.compile took 18.21 s in total
+(EngineCore pid=281) INFO 09-19 16:42:58 [model_runner.py:960] Graph capturing finished in 9 secs, took 0.28 GiB
+(EngineCore pid=281) INFO 09-19 16:42:58 [gpu_worker.py:625] Available KV cache memory: 8.62 GiB
+(EngineCore pid=281) INFO 09-19 16:42:58 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=281) INFO 09-19 16:42:58 [kv_cache_utils.py:2032] GPU KV cache size: 322,944 tokens, Maximum concurrency for 4,096 tokens per request: 78.84x
+(EngineCore pid=281) INFO 09-19 16:43:05 [model_runner.py:960] Graph capturing finished in 6 secs, took 0.15 GiB
+(EngineCore pid=281) INFO 09-19 16:43:05 [gpu_worker.py:860] Free memory on device (14.46/14.56 GiB) on startup. Desired GPU memory utilization is (0.9, 13.11 GiB). Actual usage is 3.66 GiB for consumed memory (weights + non-torch), 0.82 GiB for peak activation, and 0.15 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=8942794445` (8.33 GiB) to fit into requested memory, or `--kv-cache-memory=10396428800` (9.68 GiB) to fully utilize gpu memory. Current kv cache memory in use is 8.62 GiB.
+(EngineCore pid=281) INFO 09-19 16:43:14 [core.py:361] init engine (profile, create kv cache, warmup model) took 48.67 s (compilation: 18.21 s)
+(APIServer pid=228) INFO 09-19 16:43:18 [entry.py:139] Starting vLLM server on http://127.0.0.1:8000
+(APIServer pid=228) INFO:     Waiting for application startup.
+(APIServer pid=228) INFO:     Application startup complete.
