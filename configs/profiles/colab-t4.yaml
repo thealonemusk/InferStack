@@ -1,0 +1,49 @@
+# Google Colab free tier: a single Tesla T4 (Turing, compute capability 7.5).
+#
+# Hardware facts that drive every value below:
+#   - No bfloat16 units      -> dtype must be float16
+#   - No FP8 tensor cores    -> quantisation means AWQ/GPTQ int4
+#   - SM 7.5 < 8.0           -> no FlashAttention-2; XFormers/FlashInfer instead
+#   - 16 GB VRAM             -> a 1.5B model in fp16 leaves ~10 GB of KV cache,
+#                               which is what makes continuous batching visible
+description: "Colab free tier: 1x Tesla T4 (SM 7.5, 16 GB)"
+
+engine:
+  backend: vllm
+  model: Qwen/Qwen2.5-1.5B-Instruct
+  served_model_name: qwen2.5-1.5b
+  device: cuda
+  dtype: float16
+  host: 127.0.0.1
+  port: 8000
+
+  max_model_len: 4096
+  gpu_memory_utilization: 0.90
+  swap_space_gb: 4
+  kv_cache_dtype: auto
+
+  # Phase 5 sweeps these two. They are the heart of continuous batching:
+  # max_num_seqs caps how many sequences the scheduler may run concurrently,
+  # max_num_batched_tokens caps the token budget of a single engine step.
+  max_num_seqs: 256
+  max_num_batched_tokens: 8192
+  enable_chunked_prefill: true
+  enable_prefix_caching: false
+
+  tensor_parallel_size: 1
+  quantization: null
+
+gateway:
+  host: 127.0.0.1
+  port: 8080
+  require_auth: false
+  request_timeout_s: 300.0
+  max_concurrent_requests: 512
+
+observability:
+  log_level: INFO
+  log_format: json
+
+bench:
+  artifacts_dir: artifacts/runs
+  warmup_requests: 8
