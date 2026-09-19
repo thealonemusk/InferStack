@@ -1,0 +1,15 @@
+# This repo is authored on Windows and executed on Linux (Docker, Colab, Kaggle).
+# Normalise to LF in the repository so a checkout never hands the kernel a
+# CRLF shebang line, which fails with "bad interpreter".
+* text=auto eol=lf
+
+# Binary-ish artefacts: never touch.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.safetensors binary
+*.gguf binary
+*.bin binary
+
+# Generated; keep diffs collapsed in review.
+uv.lock linguist-generated=true -diff

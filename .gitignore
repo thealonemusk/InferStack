@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Model weights & caches (never commit these)
+models/
+*.safetensors
+*.gguf
+*.bin
+.cache/
+huggingface/
+
+# Benchmark artifacts: raw runs are local, curated results are committed
+artifacts/runs/
+artifacts/**/*.raw.jsonl
+!artifacts/curated/
+
+# Logs
+logs/
+*.log
+
+# Local tool configuration
+.claude/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
