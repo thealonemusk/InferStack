@@ -197,5 +197,12 @@ def load_settings(profile: str | None = None) -> Settings:
         raise FileNotFoundError(f"Unknown profile {name!r} (looked in {path}). Available: {known}")
 
     raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    raw.setdefault("profile", name)
-    return Settings(**raw)
+    settings = Settings(**raw)
+
+    # `profile` is a label, not a tunable: it records which YAML produced these
+    # values. INFERSTACK_PROFILE selects the file (through resolve_profile) and
+    # must not then relabel the result - otherwise `load_settings("colab-t4")`
+    # with INFERSTACK_PROFILE=local-cpu in a .env returns colab-t4's settings
+    # wearing local-cpu's name, and every artifact stamped with it is a lie.
+    settings.profile = name
+    return settings

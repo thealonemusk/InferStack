@@ -11,15 +11,23 @@ from collections.abc import Iterator
 
 import pytest
 
+from inferstack.config import Settings
 from inferstack.probe import EnvironmentReport, GpuInfo
 
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Remove every INFERSTACK_* variable for the duration of a test."""
+    """Isolate settings from the developer's machine.
+
+    Clearing ``INFERSTACK_*`` is not enough on its own: pydantic-settings also
+    reads ``.env`` from the working directory, so a local dotenv would leak into
+    assertions and make the suite pass or fail depending on whose checkout it
+    runs in.
+    """
     for key in list(os.environ):
         if key.startswith("INFERSTACK_"):
             monkeypatch.delenv(key, raising=False)
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     yield
 
 

@@ -91,3 +91,16 @@ def test_gpu_memory_utilization_is_bounded() -> None:
 
 def test_log_level_is_normalised() -> None:
     assert Settings(observability={"log_level": "debug"}).observability.log_level == "DEBUG"
+
+
+def test_profile_label_matches_the_file_that_was_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """INFERSTACK_PROFILE selects a file; it must not relabel an explicit load.
+
+    Regression: with INFERSTACK_PROFILE=local-cpu set, load_settings("colab-t4")
+    returned colab-t4's values under the name "local-cpu". Anything stamped with
+    that label - a benchmark artifact, a log line - would have been wrong.
+    """
+    monkeypatch.setenv("INFERSTACK_PROFILE", "local-cpu")
+    settings = load_settings("colab-t4")
+    assert settings.profile == "colab-t4"
+    assert settings.engine.device == "cuda", "values must come from the requested file"
