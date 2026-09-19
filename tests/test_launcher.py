@@ -197,13 +197,12 @@ def test_strip_flags_handles_boolean_switches() -> None:
 def test_supported_flags_parses_help_output(monkeypatch: pytest.MonkeyPatch) -> None:
     from inferstack.engine import launcher
 
-    monkeypatch.setattr(
-        launcher,
-        "_run_capture",
-        lambda *a, **k: (
-            "usage: vllm serve\n  --host HOST\n  --max-num-seqs N\n  --enable-prefix-caching\n"
-        ),
+    help_text = (
+        "usage: vllm serve\n  --host HOST\n  --max-num-seqs N\n  --enable-prefix-caching\n"
+        # Padding to clear MIN_PLAUSIBLE_FLAGS; a real help text lists dozens.
+        + "\n".join(f"  --other-{i} X" for i in range(10))
     )
+    monkeypatch.setattr(launcher, "_run_capture", lambda *a, **k: help_text)
     flags = launcher.supported_flags()
     assert {"--host", "--max-num-seqs", "--enable-prefix-caching"} <= flags
 
@@ -213,3 +212,48 @@ def test_supported_flags_empty_when_binary_missing(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(launcher, "_run_capture", lambda *a, **k: None)
     assert launcher.supported_flags() == set()
+
+
+def test_implausibly_small_help_is_treated_as_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression from a real run, and the more dangerous half of the bug.
+
+    `vllm serve --help` printed a usage line containing only `--help`. The
+    result was non-empty, so every other flag was judged unsupported and
+    stripped: the engine launched as a bare `vllm serve <model>` with no host,
+    port, dtype or batching settings. A validator that fails open is worse than
+    no validator, so a result too small to be a real help text is discarded.
+    """
+    from inferstack.engine import launcher
+
+    monkeypatch.setattr(launcher, "_run_capture", lambda *a, **k: "usage: vllm serve\n  --help\n")
+    assert launcher.supported_flags() == set()
+
+
+def test_probe_falls_through_to_a_usable_help_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first probe may fail; a later one supplies the model positional."""
+    from inferstack.engine import launcher
+
+    real_help = "usage\n" + "\n".join(f"  --flag-{i} X" for i in range(20))
+    calls: list[list[str]] = []
+
+    def fake(cmd: list[str], *a: object, **k: object) -> str:
+        calls.append(cmd)
+        return "usage: vllm serve\n  --help\n" if len(calls) == 1 else real_help
+
+    monkeypatch.setattr(launcher, "_run_capture", fake)
+    flags = launcher.supported_flags()
+
+    assert len(flags) >= launcher.MIN_PLAUSIBLE_FLAGS
+    assert len(calls) == 2, "should stop at the first plausible result"
+
+
+def test_nothing_is_stripped_when_flags_are_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """End-to-end guarantee: an unreadable help text must not alter the argv."""
+    from inferstack.engine import launcher
+
+    monkeypatch.setattr(launcher, "_run_capture", lambda *a, **k: "  --help\n")
+    cmd = build_command(load_settings("colab-t4").engine)
+    rejected = launcher.unsupported_flags(cmd, launcher.supported_flags())
+
+    assert rejected == []
+    assert launcher.strip_flags(cmd, rejected) == cmd

@@ -140,6 +140,17 @@ def describe_command(cmd: list[str]) -> str:
     return " ".join(part if " " not in part else f'"{part}"' for part in cmd)
 
 
+# `vllm serve --help` has been observed to print a bare usage line listing only
+# `--help`, because the model positional is missing. Any real help text lists
+# dozens of flags, so a smaller result means the probe failed, not that the
+# engine accepts almost nothing.
+MIN_PLAUSIBLE_FLAGS = 10
+
+# Placeholder satisfying the model positional; argparse prints help before the
+# value is ever used, so nothing is downloaded.
+_HELP_MODEL_PLACEHOLDER = "model-placeholder"
+
+
 def supported_flags(executable: str = "vllm", subcommand: str = "serve") -> set[str]:
     """Flags the installed engine actually accepts, read from its own ``--help``.
 
@@ -148,16 +159,37 @@ def supported_flags(executable: str = "vllm", subcommand: str = "serve") -> set[
     preemption became recompute-only, so ``--swap-space`` - valid for years -
     is rejected outright by 0.29.
 
-    Asking the binary beats pinning a version table that will drift.
+    Asking the binary beats pinning a version table that will drift, but the
+    asking must **fail safe**. Several invocations are tried, and a result too
+    small to be a real help text is discarded rather than believed. Returning
+    "unknown" costs nothing; returning a wrong answer strips flags off a
+    perfectly good command line.
 
     Returns:
-        Every ``--flag`` token in the help text, or an empty set if help could
-        not be read. An empty set means "unknown", never "nothing supported".
+        Every ``--flag`` token in the help text, or an empty set meaning
+        "could not determine" - never "nothing is supported".
     """
-    output = _run_capture([executable, subcommand, "--help"])
-    if output is None:
-        return set()
-    return set(re.findall(r"(--[a-zA-Z0-9][a-zA-Z0-9-]*)", output))
+    probes = [
+        [executable, subcommand, "--help"],
+        [executable, subcommand, _HELP_MODEL_PLACEHOLDER, "--help"],
+        [sys.executable, "-m", "vllm.entrypoints.openai.api_server", "--help"],
+    ]
+
+    for probe in probes:
+        output = _run_capture(probe)
+        if output is None:
+            continue
+        flags = set(re.findall(r"(--[a-zA-Z0-9][a-zA-Z0-9-]*)", output))
+        if len(flags) >= MIN_PLAUSIBLE_FLAGS:
+            log.info("engine.flags_probed", probe=" ".join(probe), count=len(flags))
+            return flags
+        log.debug("engine.flags_probe_rejected", probe=" ".join(probe), count=len(flags))
+
+    log.warning(
+        "engine.flags_unknown",
+        note="could not read a plausible help text; no flags will be stripped",
+    )
+    return set()
 
 
 def unsupported_flags(cmd: list[str], supported: set[str]) -> list[str]:
