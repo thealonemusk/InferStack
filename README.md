@@ -53,6 +53,41 @@ Phase 5 exists to map.
 
 ---
 
+## Use it on an endpoint you already have
+
+**No GPU needed.** The smoke harness speaks plain OpenAI-compatible HTTP, so it
+measures anything that does — vLLM, SGLang, TGI, llama.cpp, LM Studio, Ollama,
+or a hosted API:
+
+```bash
+pip install git+https://github.com/thealonemusk/InferStack@phase-01-baseline-serving
+
+inferstack smoke --base-url http://your-host:8000/v1 --model your-model -c 8
+```
+
+A serialised server and a batching one look **identical** from a single request.
+They diverge completely under concurrency, and you cannot see it without
+looking. If the speedup comes back near **1.0×**, your requests are queueing —
+batching is off, `max_num_seqs` is 1, or something in front is serialising them.
+
+It exits non-zero when the server is unreachable, when a request fails, **or
+when requests were served serially instead of batched** — so it works as a CI
+gate that catches config regressions a health check never would:
+
+```yaml
+- run: inferstack smoke --base-url ${{ vars.INFERENCE_URL }} --model ${{ vars.MODEL_ID }} -c 16
+```
+
+Already serving your own model? Swapping a hosted API for this one is a one-line
+change, because the endpoint is OpenAI-compatible:
+
+```python
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-used-yet")
+```
+
+→ **[docs/INTEGRATION.md](docs/INTEGRATION.md)** for all four integration paths,
+workload-specific tuning, and a blunt list of what isn't built yet.
+
 ## What this is
 
 Most "LLM serving" tutorials stop at a working endpoint. The interesting part
@@ -142,6 +177,9 @@ inferstack doctor                    # what is this machine, can the profile run
 inferstack profiles                  # available execution profiles
 inferstack serve --dry-run           # print the exact vLLM command, launch nothing
 inferstack smoke -c 8                # prove the server batches (exits 1 if it doesn't)
+
+# ...or measure something you already run, no GPU required:
+inferstack smoke --base-url http://your-host:8000/v1 --model your-model
 ```
 
 On a GPU session the whole Phase 1 run happens unattended — install, serve,
@@ -186,6 +224,7 @@ pre-commit install  # run both on every commit
 ## Documentation
 
 - **[Project guide](docs/PROJECT-GUIDE.md)** — theory, architecture, and how to defend every decision
+- **[Integration guide](docs/INTEGRATION.md)** — plugging this into an existing workflow
 - [Phase 0 — Foundations](docs/phases/phase-00-foundations.md)
 - [Phase 1 — Baseline serving](docs/phases/phase-01-baseline-serving.md) — including the three runs it took, and why each failure was real
 - [Architecture decision records](docs/adr/)
