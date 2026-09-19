@@ -40,6 +40,10 @@ bench = [
 engine = [
     "vllm>=0.6.0; sys_platform == 'linux'",
 ]
+# Phase 1 - driving free-tier GPU sessions (Kaggle kernels) from code.
+remote = [
+    "kaggle>=1.7",
+]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
@@ -48,6 +52,7 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML>=6.0",
     "pre-commit>=3.7",
+    "kaggle>=1.7",
 ]
 
 [project.scripts]
@@ -59,6 +64,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/inferstack"]
+
+# Execution profiles are the source of truth for how a machine is configured, so
+# an installed wheel must carry them. Without this, `inferstack doctor` works in
+# a checkout and fails everywhere else - including inside the GPU session that
+# pip-installs this package.
+[tool.hatch.build.targets.wheel.force-include]
+"configs/profiles" = "inferstack/profiles"
 
 # ---------------------------------------------------------------------------
 # Tooling
@@ -86,6 +98,9 @@ ignore = ["B008"]  # typer uses function calls in argument defaults by design
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501", "S101"]  # asserts are the point of a test
+# Standalone diagnostic scripts pushed to a remote session: they must report
+# every failure rather than propagate it, and PATH lookups are correct there.
+"src/inferstack/remote/kernels/*" = ["S603", "S607", "BLE001"]
 
 [tool.mypy]
 python_version = "3.11"

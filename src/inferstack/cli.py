@@ -13,8 +13,10 @@ Phase 0 ships the commands needed before anything is served:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -23,7 +25,21 @@ from rich.panel import Panel
 from rich.table import Table
 
 from inferstack.compat import Issue, check_profile, worst_severity
-from inferstack.config import available_profiles, load_settings, resolve_profile
+from inferstack.config import Settings, available_profiles, load_settings, resolve_profile
+from inferstack.engine.launcher import (
+    EngineProcess,
+    EngineStartupError,
+    build_command,
+    describe_command,
+)
+from inferstack.engine.smoke import (
+    BATCHING_SUSPECT_BELOW,
+    DEFAULT_PROMPT,
+    SmokeReport,
+    percentile,
+    run_smoke,
+)
+from inferstack.logging import configure_logging
 from inferstack.probe import EnvironmentReport, probe_environment
 from inferstack.version import __version__
 
@@ -280,6 +296,221 @@ def config_show(
         for key, value in values.items():
             table.add_row(key, json.dumps(value) if isinstance(value, list) else str(value))
         console.print(Panel(table, title=section, title_align="left", border_style="blue"))
+
+
+def _load_or_exit(profile: str | None) -> Settings:
+    try:
+        return load_settings(profile)
+    except FileNotFoundError as exc:
+        err_console.print(f"[bold red]{exc}[/bold red]")
+        raise typer.Exit(1) from exc
+
+
+def _preflight(settings: Settings, force: bool) -> None:
+    """Refuse to launch a profile this machine cannot run.
+
+    Starting anyway wastes a model download and, on a free-tier GPU session,
+    a meaningful fraction of the week's quota.
+    """
+    issues = check_profile(settings, probe_environment())
+    if issues:
+        _render_issues("Preflight", issues)
+    if worst_severity(issues) == "error":
+        if not force:
+            err_console.print(
+                "[bold red]Refusing to start.[/bold red] Fix the errors above, or pass "
+                "--force to launch anyway."
+            )
+            raise typer.Exit(1)
+        console.print("[yellow]--force given: starting despite errors.[/yellow]")
+
+
+@app.command()
+def serve(
+    profile: Annotated[str | None, typer.Option("--profile", "-p")] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Print the engine command and exit.")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Start even if preflight reports errors.")
+    ] = False,
+    log_file: Annotated[
+        Path | None, typer.Option("--log-file", help="Tee engine output to this file.")
+    ] = None,
+    startup_timeout: Annotated[
+        float, typer.Option("--startup-timeout", help="Seconds to wait for /health.")
+    ] = 900.0,
+    quiet: Annotated[
+        bool, typer.Option("--quiet", "-q", help="Do not mirror engine logs to the console.")
+    ] = False,
+) -> None:
+    """Launch the inference engine described by a profile.
+
+    Blocks until interrupted, then shuts the engine down cleanly.
+    """
+    settings = _load_or_exit(profile)
+    configure_logging(settings.observability.log_level, settings.observability.log_format)
+
+    command = build_command(settings.engine)
+    console.print(
+        Panel(
+            describe_command(command),
+            title=f"Engine command ({settings.profile})",
+            title_align="left",
+            border_style="blue",
+        )
+    )
+    if dry_run:
+        return
+
+    _preflight(settings, force)
+
+    engine = EngineProcess(
+        settings.engine,
+        log_file=log_file,
+        on_output=None if quiet else lambda line: console.print(f"[dim]{line}[/dim]"),
+    )
+    try:
+        engine.start()
+        console.print("[dim]Waiting for the engine to report healthy...[/dim]")
+        elapsed = engine.wait_until_healthy(timeout_s=startup_timeout)
+    except EngineStartupError as exc:
+        err_console.print(f"[bold red]Engine failed to start:[/bold red] {exc}")
+        engine.stop()
+        raise typer.Exit(1) from exc
+    except KeyboardInterrupt:
+        engine.stop()
+        raise typer.Exit(130) from None
+
+    endpoint = settings.engine.base_url
+    console.print(
+        Panel(
+            f"[green]Ready in {elapsed:.1f}s[/green]\n\n"
+            f"Endpoint  {endpoint}\n"
+            f"Model     {settings.engine.model_id}\n\n"
+            f"[dim]inferstack smoke -p {settings.profile}[/dim]\n"
+            f"[dim]curl {endpoint}/models[/dim]",
+            title="Serving",
+            title_align="left",
+            border_style="green",
+        )
+    )
+
+    try:
+        if engine.process is not None:
+            engine.process.wait()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Shutting down...[/dim]")
+    finally:
+        engine.stop()
+
+    exit_code = engine.poll()
+    if exit_code not in (0, None):
+        err_console.print(f"[red]Engine exited with code {exit_code}.[/red]")
+        raise typer.Exit(1)
+
+
+def _render_smoke(report: SmokeReport) -> None:
+    """Present the smoke result as evidence, not as a score."""
+    if report.error and report.baseline is None:
+        err_console.print(f"[bold red]{report.error}[/bold red]")
+        return
+
+    baseline = report.baseline
+    if baseline is None:
+        err_console.print("[bold red]No baseline measurement was taken.[/bold red]")
+        return
+
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    table.add_column(style="dim")
+    table.add_column()
+    table.add_row("Model", report.model)
+    table.add_row("Concurrency", str(report.concurrency))
+    table.add_row("Max tokens", str(report.max_tokens))
+    table.add_row("Succeeded", f"{len(report.successes)} / {report.concurrency}")
+    console.print(Panel(table, title="Smoke run", title_align="left", border_style="blue"))
+
+    timing = Table(box=None, padding=(0, 2, 0, 0))
+    timing.add_column("Measurement")
+    timing.add_column("Value", justify="right")
+    timing.add_row("Single request, end to end", f"{baseline.e2e_s:.2f} s")
+    if baseline.ttft_s is not None:
+        timing.add_row("Single request, TTFT", f"{baseline.ttft_s * 1000:.0f} ms")
+    if baseline.tpot_s is not None:
+        timing.add_row("Single request, TPOT", f"{baseline.tpot_s * 1000:.1f} ms/token")
+
+    serial = report.serial_estimate_s
+    if serial is not None:
+        timing.add_row(f"{report.concurrency} requests, if serial", f"{serial:.2f} s")
+    timing.add_row(f"{report.concurrency} requests, measured", f"{report.wall_clock_s:.2f} s")
+
+    speedup = report.batching_speedup
+    if speedup is not None:
+        style = "red" if speedup < BATCHING_SUSPECT_BELOW else "green"
+        timing.add_row(
+            "Speedup over serial",
+            f"[{style}]{speedup:.1f}x[/{style}] (ideal {report.concurrency}x)",
+        )
+    if report.output_throughput_tok_s is not None:
+        timing.add_row("Output throughput", f"{report.output_throughput_tok_s:.1f} tok/s")
+
+    if p50 := percentile(report.ttfts, 50):
+        timing.add_row("TTFT p50 under load", f"{p50 * 1000:.0f} ms")
+    if p95 := percentile(report.ttfts, 95):
+        timing.add_row("TTFT p95 under load", f"{p95 * 1000:.0f} ms")
+
+    console.print(
+        Panel(timing, title="Continuous batching", title_align="left", border_style="blue")
+    )
+
+    colour = "red" if (speedup or 0) < BATCHING_SUSPECT_BELOW else "green"
+    console.print(f"[{colour}]Verdict: {report.verdict}[/{colour}]")
+
+    if report.failures:
+        err_console.print(f"[red]{len(report.failures)} request(s) failed:[/red]")
+        for failure in report.failures[:3]:
+            err_console.print(f"  [dim]{failure.error}[/dim]")
+
+
+@app.command()
+def smoke(
+    profile: Annotated[str | None, typer.Option("--profile", "-p")] = None,
+    base_url: Annotated[
+        str | None, typer.Option("--base-url", help="Override the endpoint from the profile.")
+    ] = None,
+    concurrency: Annotated[int, typer.Option("--concurrency", "-c")] = 8,
+    max_tokens: Annotated[int, typer.Option("--max-tokens", "-n")] = 64,
+    prompt: Annotated[str, typer.Option("--prompt")] = DEFAULT_PROMPT,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Verify a running engine answers, and that it batches concurrent requests.
+
+    Exits non-zero if the server is unreachable, any request fails, or the
+    requests were served serially rather than batched.
+    """
+    settings = _load_or_exit(profile)
+    url = base_url or settings.engine.base_url
+
+    report = asyncio.run(
+        run_smoke(
+            base_url=url,
+            model=settings.engine.model_id,
+            concurrency=concurrency,
+            max_tokens=max_tokens,
+            prompt=prompt,
+            timeout_s=settings.gateway.request_timeout_s,
+        )
+    )
+
+    if as_json:
+        console.print_json(json.dumps(report.to_dict()))
+    else:
+        _render_smoke(report)
+
+    if report.error or report.failures:
+        raise typer.Exit(1)
+    if report.batching_speedup is not None and report.batching_speedup < BATCHING_SUSPECT_BELOW:
+        raise typer.Exit(1)
 
 
 @app.command()

@@ -153,10 +153,16 @@ class Settings(BaseSettings):
 
 
 def config_dir() -> Path:
-    """Locate ``configs/profiles``.
+    """Locate the directory holding profile YAML files.
 
-    Honours ``INFERSTACK_CONFIG_DIR``, otherwise walks up from this file looking
-    for the directory, which makes the CLI work from any working directory.
+    Searched in order:
+
+    1. ``INFERSTACK_CONFIG_DIR``, for an operator pointing at their own profiles.
+    2. ``configs/profiles`` above this file - a development checkout, which wins
+       so that edits take effect without reinstalling.
+    3. ``inferstack/profiles`` beside this module - an installed wheel, which is
+       how the package runs inside a GPU session.
+    4. ``configs/profiles`` under the working directory, as a last resort.
     """
     override = os.environ.get("INFERSTACK_CONFIG_DIR")
     if override:
@@ -166,6 +172,11 @@ def config_dir() -> Path:
         candidate = parent / "configs" / "profiles"
         if candidate.is_dir():
             return candidate
+
+    packaged = Path(__file__).resolve().parent / "profiles"
+    if packaged.is_dir():
+        return packaged
+
     return Path.cwd() / "configs" / "profiles"
 
 
@@ -197,5 +208,12 @@ def load_settings(profile: str | None = None) -> Settings:
         raise FileNotFoundError(f"Unknown profile {name!r} (looked in {path}). Available: {known}")
 
     raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    raw.setdefault("profile", name)
-    return Settings(**raw)
+    settings = Settings(**raw)
+
+    # `profile` is a label, not a tunable: it records which YAML produced these
+    # values. INFERSTACK_PROFILE selects the file (through resolve_profile) and
+    # must not then relabel the result - otherwise `load_settings("colab-t4")`
+    # with INFERSTACK_PROFILE=local-cpu in a .env returns colab-t4's settings
+    # wearing local-cpu's name, and every artifact stamped with it is a lie.
+    settings.profile = name
+    return settings
