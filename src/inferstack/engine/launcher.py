@@ -12,12 +12,13 @@ terminate politely, escalate if needed.
 from __future__ import annotations
 
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -34,6 +35,17 @@ GRACEFUL_SHUTDOWN_S = 20.0
 
 class EngineStartupError(RuntimeError):
     """The engine exited, or never became healthy, during startup."""
+
+
+def _run_capture(cmd: list[str], timeout: float = 60.0) -> str | None:
+    """Run a command and return its combined output, or None if unavailable."""
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv is built here, never user input
+            cmd, capture_output=True, text=True, timeout=timeout, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return (proc.stdout or "") + (proc.stderr or "")
 
 
 def build_command(cfg: EngineConfig) -> list[str]:
@@ -75,9 +87,13 @@ def _build_vllm_command(cfg: EngineConfig) -> list[str]:
 
     # GPU-only flags. vLLM rejects --gpu-memory-utilization on the CPU backend,
     # where KV cache size is set through VLLM_CPU_KVCACHE_SPACE instead.
+    #
+    # --swap-space is deliberately absent. vLLM's V1 engine, the default since
+    # 0.8, removed CPU swap altogether: preemption is recompute-only, and 0.29
+    # rejects the flag outright. swap_space_gb is still meaningful for the CPU
+    # backend, where it sizes VLLM_CPU_KVCACHE_SPACE.
     if cfg.device == "cuda":
         cmd += ["--gpu-memory-utilization", str(cfg.gpu_memory_utilization)]
-        cmd += ["--swap-space", str(cfg.swap_space_gb)]
         if cfg.tensor_parallel_size > 1:
             cmd += ["--tensor-parallel-size", str(cfg.tensor_parallel_size)]
         if cfg.kv_cache_dtype != "auto":
@@ -122,6 +138,58 @@ def build_env(cfg: EngineConfig, base: dict[str, str] | None = None) -> dict[str
 def describe_command(cmd: list[str]) -> str:
     """Render argv as a copy-pasteable single line."""
     return " ".join(part if " " not in part else f'"{part}"' for part in cmd)
+
+
+def supported_flags(executable: str = "vllm", subcommand: str = "serve") -> set[str]:
+    """Flags the installed engine actually accepts, read from its own ``--help``.
+
+    vLLM moves quickly and removes flags between minor versions. Measured
+    example: the V1 engine, default since 0.8, dropped CPU swap entirely because
+    preemption became recompute-only, so ``--swap-space`` - valid for years -
+    is rejected outright by 0.29.
+
+    Asking the binary beats pinning a version table that will drift.
+
+    Returns:
+        Every ``--flag`` token in the help text, or an empty set if help could
+        not be read. An empty set means "unknown", never "nothing supported".
+    """
+    output = _run_capture([executable, subcommand, "--help"])
+    if output is None:
+        return set()
+    return set(re.findall(r"(--[a-zA-Z0-9][a-zA-Z0-9-]*)", output))
+
+
+def unsupported_flags(cmd: list[str], supported: set[str]) -> list[str]:
+    """Flags in ``cmd`` that the engine does not accept.
+
+    An empty ``supported`` set means the help text was unreadable, so nothing is
+    reported: guessing would be worse than not checking.
+    """
+    if not supported:
+        return []
+    return [part for part in cmd if part.startswith("--") and part not in supported]
+
+
+def strip_flags(cmd: list[str], flags: Iterable[str]) -> list[str]:
+    """Remove ``flags`` and their values from ``cmd``.
+
+    A flag's value is the following token unless that token is itself a flag,
+    which covers both ``--flag value`` and bare boolean switches.
+    """
+    unwanted = set(flags)
+    cleaned: list[str] = []
+    index = 0
+    while index < len(cmd):
+        part = cmd[index]
+        if part in unwanted:
+            index += 1
+            if index < len(cmd) and not cmd[index].startswith("--"):
+                index += 1  # skip the value too
+            continue
+        cleaned.append(part)
+        index += 1
+    return cleaned
 
 
 class EngineProcess:

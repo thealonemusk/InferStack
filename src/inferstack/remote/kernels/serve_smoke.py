@@ -120,14 +120,40 @@ def step_serve_and_smoke() -> bool:
     import asyncio
 
     from inferstack.config import load_settings
-    from inferstack.engine.launcher import EngineProcess, EngineStartupError, describe_command
+    from inferstack.engine.launcher import (
+        EngineProcess,
+        EngineStartupError,
+        describe_command,
+        strip_flags,
+        supported_flags,
+        unsupported_flags,
+    )
     from inferstack.engine.smoke import run_smoke
 
     settings = load_settings(PROFILE)
     engine = EngineProcess(settings.engine, log_file=ENGINE_LOG)
-
     print(describe_command(engine.command), flush=True)
-    results["steps"]["engine_command"] = engine.command
+    results["steps"]["engine_command"] = list(engine.command)
+
+    # Ask the installed engine what it accepts before spending a model download
+    # finding out. The full help text is kept as an artifact so a rejected flag
+    # can be diagnosed without another run.
+    flags = supported_flags()
+    (OUTPUT_DIR / "vllm-serve-flags.txt").write_text(
+        "\n".join(sorted(flags)) or "(help unavailable)", encoding="utf-8"
+    )
+    results["steps"]["supported_flag_count"] = len(flags)
+
+    rejected = unsupported_flags(engine.command, flags)
+    if rejected:
+        # Recorded, never silent: a benchmark must know which flags were
+        # actually in effect, and a stripped flag changes what was measured.
+        print(f"UNSUPPORTED by vllm {results['steps']['install']['vllm_version']}: {rejected}")
+        results["steps"]["stripped_flags"] = rejected
+        engine.command = strip_flags(engine.command, rejected)
+        results["steps"]["engine_command_final"] = list(engine.command)
+        print(f"adjusted: {describe_command(engine.command)}", flush=True)
+
     save()
 
     try:
