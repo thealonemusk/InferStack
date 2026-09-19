@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from inferstack.config import (
@@ -104,3 +106,38 @@ def test_profile_label_matches_the_file_that_was_loaded(monkeypatch: pytest.Monk
     settings = load_settings("colab-t4")
     assert settings.profile == "colab-t4"
     assert settings.engine.device == "cuda", "values must come from the requested file"
+
+
+def test_config_dir_honours_an_explicit_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from inferstack.config import config_dir
+
+    monkeypatch.setenv("INFERSTACK_CONFIG_DIR", str(tmp_path))
+    assert config_dir() == tmp_path
+
+
+def test_packaged_profiles_fallback_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An installed wheel has no configs/profiles above it, only beside it.
+
+    Regression: load_settings resolved profiles by walking up for
+    configs/profiles, which exists in a checkout and nowhere else. The package
+    installed fine and then failed on first use inside a GPU session.
+    """
+    from inferstack import config as config_module
+
+    monkeypatch.delenv("INFERSTACK_CONFIG_DIR", raising=False)
+    source = Path(config_module.__file__).resolve()
+    assert (source.parent / "profiles").is_dir() or any(
+        (parent / "configs" / "profiles").is_dir() for parent in source.parents
+    ), "profiles must be reachable from the module, in a checkout or an installed wheel"
+
+
+def test_wheel_is_configured_to_ship_the_profiles() -> None:
+    """The force-include is what puts profiles in the wheel; guard it."""
+    import tomllib
+
+    root = Path(__file__).resolve().parents[1]
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    include = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert include["configs/profiles"] == "inferstack/profiles"
