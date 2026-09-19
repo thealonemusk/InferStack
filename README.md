@@ -108,8 +108,8 @@ goodput), the architecture, and every decision with its reasoning.
 |---|---|---|
 | 0 | Foundations: execution profiles, hardware probe, config, ADRs | ✅ done |
 | 1 | vLLM serving + continuous batching proven on real hardware | ✅ **done** |
-| 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | next |
-| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | |
+| 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ **done** |
+| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | next |
 | 4 | Benchmark harness: Poisson arrivals, concurrency sweeps, p50/p95/p99 | |
 | 5 | Continuous batching tuning, latency/throughput Pareto curves | |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, tensor parallelism | |
@@ -147,6 +147,11 @@ answer.
 argv, the vLLM version, and the active attention backend, because results are
 not comparable across backends.
 
+**Its gateway adds no buffering — and that is measured, not asserted.** Against
+an upstream emitting SSE chunks 200 ms apart, time-to-first-byte through the
+gateway is 218 ms versus 229 ms direct. A buffering proxy would have shown
+~1000 ms and silently destroyed the 26 ms TTFT above.
+
 ## Target hardware
 
 Three deliberately different machines, each described by a profile in
@@ -177,6 +182,7 @@ inferstack doctor                    # what is this machine, can the profile run
 inferstack profiles                  # available execution profiles
 inferstack serve --dry-run           # print the exact vLLM command, launch nothing
 inferstack smoke -c 8                # prove the server batches (exits 1 if it doesn't)
+inferstack gateway                   # OpenAI-compatible edge: auth, streaming, backpressure
 
 # ...or measure something you already run, no GPU required:
 inferstack smoke --base-url http://your-host:8000/v1 --model your-model
@@ -225,8 +231,10 @@ pre-commit install  # run both on every commit
 
 - **[Project guide](docs/PROJECT-GUIDE.md)** — theory, architecture, and how to defend every decision
 - **[Integration guide](docs/INTEGRATION.md)** — plugging this into an existing workflow
+- **[CONTEXT.md](CONTEXT.md)** — full state snapshot: decisions, measured results, gotchas, next steps
 - [Phase 0 — Foundations](docs/phases/phase-00-foundations.md)
 - [Phase 1 — Baseline serving](docs/phases/phase-01-baseline-serving.md) — including the three runs it took, and why each failure was real
+- [Phase 2 — The gateway](docs/phases/phase-02-gateway.md) — auth, streaming pass-through, admission control
 - [Architecture decision records](docs/adr/)
 
 ## Licence

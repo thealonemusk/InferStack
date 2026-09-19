@@ -533,6 +533,64 @@ def smoke(
 
 
 @app.command()
+def gateway(
+    profile: Annotated[str | None, typer.Option("--profile", "-p")] = None,
+    host: Annotated[str | None, typer.Option("--host", help="Override the bind address.")] = None,
+    port: Annotated[int | None, typer.Option("--port", help="Override the bind port.")] = None,
+    reload: Annotated[bool, typer.Option("--reload", help="Reload on code changes (dev).")] = False,
+) -> None:
+    """Run the OpenAI-compatible gateway in front of the engine.
+
+    The gateway does not start the engine; run `inferstack serve` separately, or
+    point gateway at an engine already running elsewhere.
+    """
+    try:
+        import uvicorn
+    except ImportError as exc:
+        err_console.print(
+            "[bold red]The gateway extra is not installed.[/bold red] "
+            'Run: pip install -e ".[gateway]"'
+        )
+        raise typer.Exit(1) from exc
+
+    from inferstack.gateway.app import create_app
+
+    settings = _load_or_exit(profile)
+    configure_logging(settings.observability.log_level, settings.observability.log_format)
+
+    bind_host = host or settings.gateway.host
+    bind_port = port or settings.gateway.port
+
+    body = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    body.add_column(style="dim")
+    body.add_column()
+    body.add_row("Listening", f"http://{bind_host}:{bind_port}")
+    body.add_row("Upstream engine", settings.engine.base_url)
+    body.add_row(
+        "Auth", "required" if settings.gateway.require_auth else "[yellow]disabled[/yellow]"
+    )
+    body.add_row("Max concurrent", str(settings.gateway.max_concurrent_requests))
+    body.add_row("Queue wait", f"{settings.gateway.max_queue_wait_s:g}s")
+    console.print(Panel(body, title="Gateway", title_align="left", border_style="green"))
+
+    if not settings.gateway.require_auth and bind_host not in {"127.0.0.1", "localhost"}:
+        console.print(
+            "[yellow]Warning:[/yellow] authentication is disabled and the gateway is bound "
+            "to a non-loopback address. Set gateway.require_auth and gateway.api_keys "
+            "before exposing this."
+        )
+
+    uvicorn.run(
+        "inferstack.gateway.app:create_app" if reload else create_app(settings),
+        factory=reload,
+        host=bind_host,
+        port=bind_port,
+        reload=reload,
+        log_config=None,  # structlog owns logging; uvicorn's would fight it
+    )
+
+
+@app.command()
 def version() -> None:
     """Print the InferStack version."""
     console.print(f"inferstack {__version__}")
