@@ -2,8 +2,9 @@
 
 Everything you need to explain, justify and defend this project.
 
-Read sections 1–3 to *understand* it. Read section 8 before anyone asks you
-about it. Section 9 is the vocabulary.
+Read sections 1–3 to *understand* it, and section 5 to defend the plan that
+hasn't been built yet. Read section 8 before anyone asks you about it. Section 9
+is the debugging playbook; section 10 is the vocabulary.
 
 > **Honesty rule used throughout this document:** anything stated as a
 > *measurement* was actually measured on real hardware, and says where. Anything
@@ -373,6 +374,129 @@ cannot tune what you haven't measured (3 before 5). You cannot claim an
 optimisation without a baseline (5 before 6). Every phase exists because the
 next one depends on it.
 
+### 5.1 Phase 2 — why a gateway at all
+
+vLLM's server is an *engine* endpoint, not a production edge. A gateway in front
+adds what the engine deliberately does not: API-key auth, request IDs for
+tracing, timeouts, admission control, and later multi-replica routing.
+
+Three things that are easy to get wrong:
+
+- **Never buffer a stream.** A proxy that collects the full response before
+  forwarding it destroys TTFT — the number you spent Phase 1 measuring. SSE must
+  be forwarded chunk by chunk.
+- **Cancel upstream on client disconnect.** If a caller hangs up and you don't
+  abort the request, the GPU keeps generating tokens nobody will read. On a
+  batching server that stolen capacity is taken from *other* users.
+- **Reject rather than queue without bound.** An unbounded queue converts an
+  overload into a timeout for everyone. Bounded concurrency plus a fast 429 is
+  strictly kinder.
+
+### 5.2 Phase 3 — what to measure, and why histograms
+
+vLLM already exports Prometheus metrics. The ones that matter:
+
+| Metric | Tells you |
+|---|---|
+| `vllm:num_requests_running` | Current batch size — is the batch actually filling? |
+| `vllm:num_requests_waiting` | Queue depth — the leading indicator of latency pain |
+| `vllm:gpu_cache_usage_perc` | KV cache pressure; near 100% means preemption is next |
+| `vllm:num_preemptions_total` | Where p99 spikes come from |
+| `vllm:time_to_first_token_seconds` | TTFT histogram |
+| `vllm:time_per_output_token_seconds` | TPOT histogram |
+
+**Why histograms rather than averages.** Latency distributions are heavy-tailed.
+A mean TTFT of 200 ms is compatible with a p99 of 8 seconds, and the p99 is what
+users actually experience. You also cannot recover a percentile by averaging
+percentiles across scrape intervals — that's arithmetically meaningless. You
+need bucket counts, which is exactly what a Prometheus histogram gives you.
+
+### 5.3 Phase 4 — the benchmarking sin to avoid
+
+There are two ways to generate load, and one of them lies.
+
+**Closed loop:** N workers, each sends a request and waits for the response
+before sending the next. This is what almost every naive benchmark does — and
+it's what `smoke` does today, which is exactly why `smoke` is labelled a sanity
+check rather than a benchmark.
+
+The flaw is **coordinated omission**: when the server slows down, your load
+generator *automatically sends fewer requests*. The load adapts to the server's
+distress, so the measurement hides the very problem you're looking for.
+
+**Open loop:** requests arrive at a fixed rate λ regardless of whether previous
+ones finished, typically with Poisson-distributed inter-arrival times (memoryless
+— the right model for independent users). If the server slows, the queue grows,
+and your latency numbers show it. That's the honest measurement.
+
+Phase 4 reports a *curve* — latency versus arrival rate — not a single number,
+plus **goodput** under a stated SLO.
+
+### 5.4 Phase 5 — the two knobs, and Little's Law
+
+- `max_num_seqs` — the ceiling on sequences in the running batch
+- `max_num_batched_tokens` — the token budget for a single engine step, which
+  with chunked prefill governs how much prefill work competes with decode
+
+**Little's Law** (`L = λW`) is the reasoning tool: average concurrency equals
+arrival rate × average latency. At 50 requests/second with 2-second average
+latency you need ~100 concurrent slots. If `max_num_seqs` is below that, the
+remainder queues, and queueing is what your p99 is made of. It lets you predict
+the knob setting instead of bisecting blindly.
+
+The deliverable is a Pareto frontier, because there is no single best setting.
+
+### 5.5 Phase 6 — why these optimisations, in this order
+
+**Quantisation (AWQ / GPTQ int4).** Decode is memory-bandwidth-bound, so
+shrinking the weights read per token is a direct speedup — 4-bit weights move a
+quarter of the bytes. Two mechanisms worth knowing apart:
+
+- **GPTQ** quantises column by column, using second-order (Hessian) information
+  to update the *remaining* weights so they compensate for the error just
+  introduced.
+- **AWQ** is activation-aware: a small fraction of weight channels matter
+  disproportionately, identified by activation magnitude, and are scaled to
+  protect them before quantising.
+
+**The nuance to volunteer:** weight-only quantisation mainly helps *decode*.
+Prefill is compute-bound, so it gains little, and dequantisation adds
+arithmetic. On a T4 without Marlin kernels the gain shrinks further — which is
+why this project promises to *measure* the speedup rather than assume it.
+
+**Prefix caching.** PagedAttention's block indirection makes KV blocks
+shareable, so requests with a common prefix can reuse them. Enormous for a long
+shared system prompt, few-shot examples, or RAG over a common document — and
+worth roughly nothing when prefixes don't repeat. The workload decides.
+
+**Speculative decoding.** A small draft model proposes k tokens; the target
+model verifies all k in *one* forward pass. This works precisely because decode
+is memory-bound: verifying 5 tokens costs almost the same as verifying 1, since
+the cost is dominated by reading the weights. With rejection sampling it is
+**lossless** — the output distribution is identical to the target model's. The
+speedup is governed by the acceptance rate, so a badly matched draft model can
+make things *slower*.
+
+**Tensor parallelism.** Split each layer across GPUs; every layer needs an
+all-reduce. Bandwidth-hungry, so it wants NVLink. Kaggle's two T4s are on PCIe,
+so **sub-linear scaling is expected here** — a result to explain, not to hide.
+
+### 5.6 Phases 7–9
+
+**Phase 7 — production behaviour.** Admission control means shedding load when
+queue depth already implies an SLO miss: accepting a request you cannot serve in
+time degrades everyone rather than one caller. Multi-replica routing should be
+**prefix-aware** — route requests sharing a prefix to the same replica so they
+hit its prefix cache, which plain round-robin actively defeats.
+
+**Phase 8 — SGLang.** Its distinguishing feature is **RadixAttention**: a radix
+tree over cached prefixes giving automatic, fine-grained sharing rather than
+opt-in prefix caching. The comparison is only meaningful on an identical model,
+identical request trace and identical metric definitions — which is the entire
+reason this project addresses the engine over HTTP (ADR-0003).
+
+**Phase 9 — the report.** Assembled from the ADRs plus measured results.
+
 ---
 
 ## 6. Current status — be precise about this
@@ -636,7 +760,80 @@ guard does when its input is garbage, not just when its input is missing.
 
 ---
 
-## 9. Glossary
+## 9. When something goes wrong — a playbook
+
+Symptoms map to causes fairly reliably in inference serving. This is the order
+to check things in.
+
+### Throughput is low and GPU utilisation is low
+
+The batch isn't filling. Check `vllm:num_requests_running` against
+`max_num_seqs`. If running is far below the cap, you are **not** GPU-limited —
+either the arrival rate is too low to form a batch, or something upstream is
+serialising requests (a proxy, a client-side lock, a closed-loop load generator
+with too few workers).
+
+> Quick discriminator: `inferstack smoke -c 8`. A speedup near 1.0× means
+> serialisation. Near 8× means the batch is fine and the load is simply light.
+
+### p99 latency spikes, p50 is fine
+
+Almost always **preemption**. Check `vllm:num_preemptions_total` and
+`vllm:gpu_cache_usage_perc`. If cache usage sits near 100%, the KV cache is
+exhausted and sequences are being evicted and recomputed. Reduce
+`max_num_seqs`, reduce `max_model_len`, or raise `gpu_memory_utilization` to
+buy more cache.
+
+Counter-intuitive but correct: *lowering* concurrency can improve p99, because
+you stop thrashing.
+
+### TTFT is bad but TPOT is fine
+
+Prefill-side problem. Either requests are queueing (check
+`vllm:num_requests_waiting`) or a long prompt is monopolising engine steps.
+Enable `enable_chunked_prefill` and lower `max_num_batched_tokens` — that trades
+a little TTFT on the long request for a much better ITL tail on everyone else.
+
+### TPOT degrades as load rises
+
+Expected up to a point — decode is memory-bandwidth-bound and a bigger batch
+shares that bandwidth. If it degrades sharply, you have likely crossed into
+preemption. This is the latency-throughput trade-off being real, and it is what
+the Phase 5 Pareto curve is for.
+
+### Out of memory at startup
+
+`gpu_memory_utilization` too high, or `max_model_len` too large. Remember the
+lesson from the Phase 1 run: **CUDA graph capture consumes VRAM too**, and vLLM
+notes that with graph memory profiling on (default since 0.21) an effective
+`--gpu-memory-utilization=0.9` behaves like 0.8765.
+
+### "No available memory for cache blocks"
+
+Weights plus overhead left nothing for KV cache. Lower `max_model_len`, raise
+`gpu_memory_utilization`, or use a smaller model. Work out the KV budget from
+§2.2 before guessing.
+
+### vLLM refuses to load the model with a dtype error
+
+Compute capability below 8.0 and a bfloat16 checkpoint. Pin
+`engine.dtype: float16`. `inferstack doctor` catches this before the download.
+
+### A flag is rejected outright
+
+vLLM removes flags between versions — `--swap-space` and `--device` both went
+when the V1 engine landed. Check `vllm serve --help`, or let the launcher's own
+flag probe report it.
+
+### Numbers are good but not reproducible
+
+Record the exact argv, the vLLM version and the **attention backend**. Results
+are not comparable across backends, and a T4 silently uses TRITON_ATTN rather
+than FlashAttention-2.
+
+---
+
+## 10. Glossary
 
 | Term | Meaning |
 |---|---|
@@ -661,7 +858,7 @@ guard does when its input is garbage, not just when its input is missing.
 
 ---
 
-## 10. Running it yourself
+## 11. Running it yourself
 
 ```bash
 uv venv
