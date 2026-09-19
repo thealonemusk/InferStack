@@ -476,14 +476,32 @@ def _render_smoke(report: SmokeReport) -> None:
 def smoke(
     profile: Annotated[str | None, typer.Option("--profile", "-p")] = None,
     base_url: Annotated[
-        str | None, typer.Option("--base-url", help="Override the endpoint from the profile.")
+        str | None, typer.Option("--base-url", help="Endpoint to measure, e.g. http://host:8000/v1")
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="Model id the endpoint serves, if not this profile's."),
+    ] = None,
+    api_key: Annotated[
+        str | None,
+        typer.Option(
+            "--api-key",
+            envvar="INFERSTACK_API_KEY",
+            help="Bearer token, for an endpoint that requires one.",
+        ),
     ] = None,
     concurrency: Annotated[int, typer.Option("--concurrency", "-c")] = 8,
     max_tokens: Annotated[int, typer.Option("--max-tokens", "-n")] = 64,
     prompt: Annotated[str, typer.Option("--prompt")] = DEFAULT_PROMPT,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Verify a running engine answers, and that it batches concurrent requests.
+    """Measure whether an OpenAI-compatible endpoint batches concurrent requests.
+
+    Works against this project's engine, and equally against any other
+    OpenAI-compatible server - vLLM, SGLang, TGI, llama.cpp, a hosted API - so
+    it is useful without running InferStack's own stack:
+
+        inferstack smoke --base-url http://your-host:8000/v1 --model your-model
 
     Exits non-zero if the server is unreachable, any request fails, or the
     requests were served serially rather than batched.
@@ -494,10 +512,11 @@ def smoke(
     report = asyncio.run(
         run_smoke(
             base_url=url,
-            model=settings.engine.model_id,
+            model=model or settings.engine.model_id,
             concurrency=concurrency,
             max_tokens=max_tokens,
             prompt=prompt,
+            api_key=api_key,
             timeout_s=settings.gateway.request_timeout_s,
         )
     )

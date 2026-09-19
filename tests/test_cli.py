@@ -81,3 +81,66 @@ def test_doctor_strict_promotes_warnings(
 
 def test_doctor_unknown_profile_exits_nonzero() -> None:
     assert runner.invoke(app, ["doctor", "--profile", "nope"]).exit_code == 1
+
+
+# --- smoke against a third-party endpoint ---------------------------------
+
+
+def test_smoke_accepts_an_external_endpoint_and_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The integration path: measure someone else's OpenAI-compatible server.
+
+    Without --model the profile's model id is sent, which a third-party
+    endpoint will reject as 'not served here'.
+    """
+    captured: dict = {}
+
+    async def fake_run_smoke(**kwargs: object):
+        captured.update(kwargs)
+        from inferstack.engine.client import CompletionResult
+        from inferstack.engine.smoke import SmokeReport
+
+        good = CompletionResult(text="x", e2e_s=0.5, ttft_s=0.1, itl_s=[0.01], completion_tokens=2)
+        return SmokeReport(
+            model=str(kwargs["model"]),
+            concurrency=2,
+            baseline=good,
+            concurrent=[good, good],
+            wall_clock_s=0.5,
+        )
+
+    monkeypatch.setattr("inferstack.cli.run_smoke", fake_run_smoke)
+    result = runner.invoke(
+        app,
+        [
+            "smoke",
+            "--base-url",
+            "https://someone-else.example/v1",
+            "--model",
+            "their-model",
+            "--api-key",
+            "sk-secret",
+            "-c",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert captured["base_url"] == "https://someone-else.example/v1"
+    assert captured["model"] == "their-model"
+    assert captured["api_key"] == "sk-secret"
+
+
+def test_smoke_falls_back_to_the_profile_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    async def fake_run_smoke(**kwargs: object):
+        captured.update(kwargs)
+        from inferstack.engine.smoke import SmokeReport
+
+        return SmokeReport(model="m", concurrency=1, error="stop here")
+
+    monkeypatch.setattr("inferstack.cli.run_smoke", fake_run_smoke)
+    runner.invoke(app, ["smoke", "--profile", "colab-t4"])
+
+    assert captured["model"] == "qwen2.5-1.5b"
+    assert captured["api_key"] is None
