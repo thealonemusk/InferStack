@@ -1,0 +1,726 @@
+{
+  "uid": "inferstack-inference",
+  "title": "InferStack - inference",
+  "description": "The four signals that explain latency - running batch, queue depth, KV cache pressure, preemptions - above the latency they explain. Percentiles come from bucket counts, never from averaged percentiles.",
+  "tags": [
+    "inferstack",
+    "vllm",
+    "inference"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Running batch and queue depth",
+      "description": "The batch is the throughput; the queue is the latency. A queue that is never empty while the batch is far below max_num_seqs means the bottleneck is not the GPU.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "vllm:num_requests_running",
+          "legendFormat": "running (batch size)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "vllm:num_requests_waiting",
+          "legendFormat": "waiting (queue depth)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "KV cache utilisation",
+      "description": "Phase 1 measured 8.62 GiB of KV cache = 322,944 tokens = 78.84x concurrency on one T4. Above ~90% the engine starts preempting, which is where p99 spikes come from.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "vllm:kv_cache_usage_perc",
+          "legendFormat": "kv cache"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "vllm:gpu_cache_usage_perc",
+          "legendFormat": "kv cache (v0)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "TTFT - engine",
+      "description": "Time to first token, from the engine's own histogram. Phase 1: 26 ms for a single request, 59 ms p50 under a batch of 8.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum(rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "TPOT - engine",
+      "description": "Time per output token. This is the streaming 'feel'; Phase 1 measured 14.6 ms/token on a T4 with TRITON_ATTN.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum(rate(vllm:time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(vllm:time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Preemptions",
+      "description": "Each preemption throws away computed KV and recomputes it later. A non-zero rate here explains a p99 that the averages cannot.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "rate(vllm:num_preemptions_total[$__rate_interval])",
+          "legendFormat": "preemptions/s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Token throughput",
+      "description": "Prefill and decode separated, because they are different work: prefill is compute-bound and batches poorly, decode is memory-bandwidth-bound and batches almost for free.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "rate(vllm:generation_tokens_total[$__rate_interval])",
+          "legendFormat": "output tok/s"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "rate(vllm:prompt_tokens_total[$__rate_interval])",
+          "legendFormat": "prompt tok/s"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Gateway admission",
+      "description": "in-flight against capacity. When in-flight sits at capacity the gateway, not the engine, is the limit - and the shed rate beside this panel is how that failure reaches clients.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "inferstack_gateway_in_flight_requests",
+          "legendFormat": "in flight"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "inferstack_gateway_waiting_requests",
+          "legendFormat": "waiting for a slot"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "inferstack_gateway_capacity_requests",
+          "legendFormat": "capacity"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Gateway shed rate",
+      "description": "429s returned because no admission slot freed within the queue budget. A fast refusal is kinder than a slow timeout: it lets a well-behaved client back off instead of retrying into a collapsing server.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "rate(inferstack_gateway_rejected_total[$__rate_interval])",
+          "legendFormat": "shed/s"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "rate(inferstack_gateway_admitted_total[$__rate_interval])",
+          "legendFormat": "admitted/s"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Gateway requests by status",
+      "description": "502 means the engine is unreachable, 504 that it did not answer in time, 429 that this gateway refused. Three very different faults that a single error rate would merge.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "sum by (status) (rate(inferstack_gateway_requests_total[$__rate_interval]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Gateway overhead on first byte",
+      "description": "Gateway time-to-headers for streaming requests against the engine's own TTFT, on matching bucket boundaries. The gap is what this layer costs; Phase 2 measured no buffering, and this is how a regression would show up.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(inferstack_gateway_time_to_headers_seconds_bucket{stream=\"true\"}[$__rate_interval])) by (le))",
+          "legendFormat": "gateway p95"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(inferstack_gateway_time_to_headers_seconds_bucket{stream=\"true\"}[$__rate_interval])) by (le))",
+          "legendFormat": "gateway p99"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "engine p95"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "engine p99"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Abandoned streams",
+      "description": "Clients that hung up mid-response. On a continuously-batched engine an abandoned request holds its slot in the running batch until the upstream connection drops, so it is actively stealing throughput from live requests.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "inferstack-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "sum(rate(inferstack_gateway_streams_disconnected_total[$__rate_interval]))",
+          "legendFormat": "abandoned/s"
+        }
+      ]
+    }
+  ]
+}

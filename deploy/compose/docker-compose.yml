@@ -1,0 +1,64 @@
+# Prometheus + Grafana for InferStack (Phase 3).
+#
+# Deliberately *not* running the gateway or the engine. Those live where the GPU
+# is - a Kaggle session, a Colab runtime, a server - and this file exists to be
+# pointed at them, on whatever host is convenient. Putting them in here would
+# imply a single-host deployment that this project does not have.
+#
+#   docker compose -f deploy/compose/docker-compose.yml up -d
+#   Grafana:    http://localhost:3000  (anonymous, viewer)
+#   Prometheus: http://localhost:9090
+#
+# NOT VERIFIED: this compose file has never been run. The development machine
+# has no Docker (see CONTEXT.md). The dashboard's queries are checked by a test
+# against the metric names this project emits, which catches a typo but not a
+# provisioning mistake.
+
+name: inferstack-observability
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: inferstack-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 15 days: long enough to compare a tuning change against last week,
+      # short enough that the volume stays small on a laptop.
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      # host.docker.internal exists on Docker Desktop but not on Linux, where
+      # the scrape targets would otherwise resolve to nothing.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: inferstack-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      # A local, read-only dashboard. Anonymous viewer access keeps the
+      # first-run experience to one URL; do not copy this to anything exposed.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: dark
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/inferstack-inference.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:

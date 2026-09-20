@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: InferStack
+    type: file
+    # Read-only: the dashboard is a file in the repository, so an edit made in
+    # the browser would be lost on the next restart and should not be offered.
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
