@@ -8,12 +8,25 @@ number, which is why Phase 3 reads them rather than inventing substitutes.
 
 Two deliberate choices here.
 
-**Names are matched through aliases.** vLLM has renamed metrics across versions
-- ``vllm:gpu_cache_usage_perc`` became ``vllm:kv_cache_usage_perc`` in the V1
-engine, and counters appear with and without the ``_total`` suffix depending on
-how the exporter was declared. A snapshot therefore accepts any known spelling
-and reports what it could *not* find, rather than silently showing a zero that
-looks like an idle server.
+**Names are matched through aliases.** vLLM renames metrics across versions, and
+guessing which spelling is current is how a dashboard ends up permanently empty.
+A capture from a real vLLM 0.29.0 (``tests/fixtures/vllm_metrics_real.txt``)
+settled three of these, two of them against what this module originally assumed:
+
+- the cache gauge is ``vllm:kv_cache_usage_perc``; ``vllm:gpu_cache_usage_perc``
+  is the older V0 name and is still accepted
+- TPOT is ``vllm:request_time_per_output_token_seconds``. This module shipped
+  believing it was ``vllm:time_per_output_token_seconds``, which 0.29.0 does not
+  emit at all - so the signal was simply absent, and the Grafana panel built on
+  it would have rendered "No data" indefinitely
+- ``vllm:inter_token_latency_seconds`` is a *separate* metric, not a synonym:
+  ITL is the gap between consecutive tokens, TPOT is that gap averaged over a
+  request. Both are declared, because a tail in one and not the other says
+  different things about the scheduler
+
+A snapshot reports what it could *not* find rather than silently showing a zero
+that looks like an idle server, which is the only reason the missing TPOT was
+visible at all.
 
 **An ambiguous signal is an error.** If a metric appears with more than one
 label set - two models, two engine cores - there is no correct way to reduce it
@@ -92,9 +105,17 @@ ENGINE_SIGNALS: tuple[Signal, ...] = (
     ),
     Signal(
         "tpot",
-        ("vllm:time_per_output_token_seconds",),
+        # Confirmed against a real 0.29.0 capture. The second name is the older
+        # spelling this project originally assumed and never verified.
+        ("vllm:request_time_per_output_token_seconds", "vllm:time_per_output_token_seconds"),
         "histogram",
-        "Time per output token",
+        "Time per output token, averaged within a request",
+    ),
+    Signal(
+        "itl",
+        ("vllm:inter_token_latency_seconds",),
+        "histogram",
+        "Gap between consecutive tokens - the streaming feel; its tail matters",
     ),
     Signal(
         "e2e_latency",
@@ -192,6 +213,12 @@ class EngineSnapshot:
     @property
     def tpot(self) -> HistogramView | None:
         return self.histograms.get("tpot")
+
+    @property
+    def itl(self) -> HistogramView | None:
+        """Inter-token latency. Not a synonym for :attr:`tpot`: this is the gap
+        between consecutive tokens, TPOT is that gap averaged over a request."""
+        return self.histograms.get("itl")
 
     @property
     def is_empty(self) -> bool:

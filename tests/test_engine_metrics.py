@@ -20,6 +20,7 @@ from inferstack.observability.engine import (
     scrape_engine,
     snapshot_from_text,
 )
+from inferstack.observability.promtext import parse_exposition
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vllm_metrics.txt"
 MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -204,3 +205,90 @@ async def test_snapshot_round_trips_through_json(exposition: str) -> None:
     assert payload["values"]["running"] == 8.0
     assert payload["histograms"]["ttft"]["count"] == 9.0
     assert payload["missing"] == []
+
+
+# --- bound to what a real engine actually emits ---------------------------
+#
+# Everything above this line tests the selection rules against text this project
+# wrote. That is how Phase 3 shipped declaring `vllm:time_per_output_token_seconds`,
+# a metric vLLM 0.29.0 does not emit: the synthetic fixture agreed with the code
+# because the same person wrote both. The capture below was taken from a real
+# engine and is the only file here that can contradict us.
+
+REAL_CAPTURE = Path(__file__).parent / "fixtures" / "vllm_metrics_real.txt"
+
+
+@pytest.fixture(scope="module")
+def real_exposition() -> str:
+    return REAL_CAPTURE.read_text(encoding="utf-8")
+
+
+def test_every_declared_signal_exists_in_a_real_engine(real_exposition: str) -> None:
+    """The test that would have caught the TPOT name being wrong.
+
+    A signal nobody emits is not an error anywhere: the snapshot lists it as
+    missing, the Grafana panel renders "No data", and the alert never fires.
+    All three look exactly like a healthy idle system.
+    """
+    snapshot = snapshot_from_text(real_exposition)
+    assert snapshot.missing == (), f"declared but not emitted by vLLM 0.29.0: {snapshot.missing}"
+
+
+def test_the_capture_is_a_capture(real_exposition: str) -> None:
+    """Unedited, or it is not evidence. A tidied capture is a reconstruction."""
+    assert real_exposition.startswith("# HELP python_gc_objects_collected_total")
+    assert "vllm:num_requests_running" in real_exposition
+
+
+def test_the_cache_metric_really_is_the_v1_spelling(real_exposition: str) -> None:
+    """Handled as an alias before this was confirmed; now it is confirmed."""
+    assert "vllm:kv_cache_usage_perc" in real_exposition
+    assert "vllm:gpu_cache_usage_perc" not in real_exposition
+
+
+def test_tpot_and_itl_are_different_metrics(real_exposition: str) -> None:
+    """ITL is the gap between consecutive tokens; TPOT is that gap averaged
+    within a request. Ten requests of ~57 tokens give ten TPOT observations and
+    several hundred ITL ones, which is what makes them impossible to confuse
+    once you have looked."""
+    snapshot = snapshot_from_text(real_exposition)
+    assert snapshot.tpot is not None
+    assert snapshot.itl is not None
+    assert snapshot.itl.count > snapshot.tpot.count * 10
+
+
+def test_the_older_tpot_spelling_is_still_accepted() -> None:
+    """Kept as an alias for engines older than the one that was captured."""
+    text = "\n".join(
+        [
+            'vllm:time_per_output_token_seconds_bucket{le="+Inf"} 3',
+            "vllm:time_per_output_token_seconds_count 3",
+            "vllm:time_per_output_token_seconds_sum 0.05",
+        ]
+    )
+    assert snapshot_from_text(text).tpot is not None
+
+
+def test_a_real_engine_labels_series_with_exactly_engine_and_model(
+    real_exposition: str,
+) -> None:
+    """What decides whether the ambiguity rule ever fires in practice.
+
+    One engine and one model give one series per signal, so a snapshot is
+    unambiguous without a filter. A data-parallel deployment would have several
+    `engine` values and need `--label engine=0`, which is the behaviour, not a
+    bug.
+    """
+    from inferstack.observability.promtext import select
+
+    samples = select(parse_exposition(real_exposition), "vllm:num_requests_running")
+    assert len(samples) == 1
+    assert set(samples[0].labels) == {"engine", "model_name"}
+
+
+def test_the_real_capture_is_unambiguous_without_a_label_filter(
+    real_exposition: str,
+) -> None:
+    snapshot = snapshot_from_text(real_exposition)
+    assert not snapshot.is_empty
+    assert snapshot.running is not None

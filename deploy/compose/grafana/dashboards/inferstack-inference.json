@@ -228,8 +228,8 @@
     {
       "id": 4,
       "type": "timeseries",
-      "title": "TPOT - engine",
-      "description": "Time per output token. This is the streaming 'feel'; Phase 1 measured 14.6 ms/token on a T4 with TRITON_ATTN.",
+      "title": "TPOT and ITL - engine",
+      "description": "Two metrics, not one. ITL is the gap between consecutive tokens - the streaming 'feel'. TPOT is that gap averaged within a request, so a tail in ITL that TPOT does not show means the stutter is inside requests rather than between them. Phase 1 measured 14.6 ms/token on a T4 with TRITON_ATTN; the 20 Sep run through the gateway measured 15.1 ms.",
       "datasource": {
         "type": "prometheus",
         "uid": "inferstack-prometheus"
@@ -272,8 +272,8 @@
             "type": "prometheus",
             "uid": "inferstack-prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum(rate(vllm:time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "expr": "histogram_quantile(0.5, sum(rate(vllm:request_time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "TPOT p50"
         },
         {
           "refId": "B",
@@ -281,8 +281,8 @@
             "type": "prometheus",
             "uid": "inferstack-prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(vllm:time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "expr": "histogram_quantile(0.95, sum(rate(vllm:request_time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "TPOT p95"
         },
         {
           "refId": "C",
@@ -290,8 +290,17 @@
             "type": "prometheus",
             "uid": "inferstack-prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum(rate(vllm:time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
-          "legendFormat": "p99"
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:request_time_per_output_token_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "TPOT p99"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "inferstack-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:inter_token_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "ITL p99"
         }
       ]
     },

@@ -163,3 +163,38 @@ def test_the_inf_bound_serialises_as_a_string_so_artifacts_stay_valid_json() -> 
     back, the JSON spec does not allow it, and every other tool rejects it."""
     view = HistogramView("h", {}, ((1.0, 4.0), (INF, 10.0)), count=10.0, sum=12.5)
     json.dumps(view.to_dict(), allow_nan=False)
+
+
+# --- checked against Prometheus itself -----------------------------------
+
+
+def test_our_quantiles_match_what_prometheus_computes() -> None:
+    """The strongest check available: the reference implementation's own answer.
+
+    The values on the right were produced by Prometheus 2.55.1 evaluating
+    `histogram_quantile(0.99, sum(rate(<metric>_bucket[1m])) by (le))` over the
+    same capture this test reads, served to it by
+    `scripts/verify_prometheus.py`. Full run in
+    `artifacts/curated/phase03/prometheus-verification.json`.
+
+    Mirroring Prometheus' arithmetic is only a claim until the two are compared
+    on the same data; this is that comparison. It also pins it - if this module
+    is ever "simplified" into a plain linear interpolation, the tail values
+    diverge and this fails.
+    """
+    samples = parse_exposition(
+        (FIXTURE.parent / "vllm_metrics_real.txt").read_text(encoding="utf-8")
+    )
+    prometheus_said = {
+        "vllm:time_to_first_token_seconds": 2.350000000000001,
+        "vllm:request_time_per_output_token_seconds": 0.024850000000000004,
+        "vllm:inter_token_latency_seconds": 0.02484973821989529,
+    }
+
+    for metric, expected in prometheus_said.items():
+        (view,) = build_histograms(samples, metric)
+        ours = view.quantile(0.99)
+        assert ours is not None
+        # rel=1e-12: the two implementations agree to floating-point noise, not
+        # merely to a rounded display value.
+        assert ours == pytest.approx(expected, rel=1e-12), metric

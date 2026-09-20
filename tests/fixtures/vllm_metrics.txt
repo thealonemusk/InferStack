@@ -1,9 +1,11 @@
 # Synthetic vLLM metrics exposition.
 #
-# SYNTHETIC - hand-written from vLLM's documented metric names and default
-# bucket layouts, NOT captured from a running engine. The gateway has not yet
-# fronted a real vLLM (see docs/phases/phase-03-observability.md), so nothing
-# here should be quoted as a measurement.
+# SYNTHETIC - hand-written, NOT captured from a running engine. Nothing here is
+# evidence of what any engine emits; vllm_metrics_real.txt is the capture, and
+# it is the authority on names, labels and bucket layouts.
+#
+# This file exists for one thing: values chosen so the bucket-interpolation
+# arithmetic is checkable by hand.
 #
 # The values are chosen to match the Phase 1 TTFT distribution so that the
 # bucket-resolution loss is demonstrable: the nine observations below are
@@ -49,20 +51,34 @@ vllm:time_to_first_token_seconds_bucket{engine="0",le="10.0",model_name="Qwen/Qw
 vllm:time_to_first_token_seconds_bucket{engine="0",le="+Inf",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
 vllm:time_to_first_token_seconds_count{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
 vllm:time_to_first_token_seconds_sum{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 0.49
-# HELP vllm:time_per_output_token_seconds Histogram of time per output token in seconds.
-# TYPE vllm:time_per_output_token_seconds histogram
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.01",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 0.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.025",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.05",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.075",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.1",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.25",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="0.5",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="1.0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="2.5",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_bucket{engine="0",le="+Inf",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_count{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
-vllm:time_per_output_token_seconds_sum{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 0.1314
+# HELP vllm:request_time_per_output_token_seconds Histogram of time per output token in seconds.
+# TYPE vllm:request_time_per_output_token_seconds histogram
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.01",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 0.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.025",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.05",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.075",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.1",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.25",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="0.5",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="1.0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="2.5",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_bucket{engine="0",le="+Inf",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_count{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 9.0
+vllm:request_time_per_output_token_seconds_sum{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 0.1314
+# HELP vllm:inter_token_latency_seconds Histogram of inter token latency in seconds.
+# TYPE vllm:inter_token_latency_seconds histogram
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.01"} 0.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.025"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.05"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.075"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.1"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.25"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="0.5"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="1.0"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="2.5"} 567.0
+vllm:inter_token_latency_seconds_bucket{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct",le="+Inf"} 567.0
+vllm:inter_token_latency_seconds_count{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 567.0
+vllm:inter_token_latency_seconds_sum{engine="0",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 8.2782
 # HELP vllm:e2e_request_latency_seconds Histogram of end to end request latency in seconds.
 # TYPE vllm:e2e_request_latency_seconds histogram
 vllm:e2e_request_latency_seconds_bucket{engine="0",le="0.3",model_name="Qwen/Qwen2.5-1.5B-Instruct"} 0.0
