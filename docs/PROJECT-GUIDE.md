@@ -333,11 +333,15 @@ src/inferstack/
     metrics.py    the gateway's own registry (needs prometheus_client)
   bench/          Phase 4 (empty)
 
-deploy/compose/   Prometheus + Grafana, dashboard and provisioning
-scripts/          the measurement scripts behind the artifacts
+  remote/
+    kernels/gateway_metrics.py  the whole stack on a GPU session, unattended
+
+deploy/compose/   Prometheus + Grafana, dashboard, provisioning, alert rules
+scripts/          the measurement and verification scripts behind the artifacts
+.github/workflows/ CI: lint, types, tests, the measurement, promtool
 docs/adr/         architecture decision records
 docs/phases/      what each phase built and how to verify it
-tests/            271 tests
+tests/            302 tests
 ```
 
 ### The four ideas that hold it together
@@ -374,7 +378,7 @@ methodology, not a workaround — say it that way.
 | 0 | Foundations: profiles, hardware probe, config, ADRs | ✅ done |
 | 1 | vLLM serving + continuous batching proven on hardware | ✅ done |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ done |
-| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache util | ✅ done, not yet against a real vLLM |
+| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache util | ✅ done, verified on a T4 |
 | 4 | Benchmark harness: Poisson arrivals, sweeps, p50/p95/p99 | ← next |
 | 5 | Continuous batching tuning → latency/throughput Pareto curves | |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, TP=2 | |
@@ -416,7 +420,14 @@ vLLM already exports Prometheus metrics. The ones that matter:
 | `vllm:gpu_cache_usage_perc` | KV cache pressure; near 100% means preemption is next |
 | `vllm:num_preemptions_total` | Where p99 spikes come from |
 | `vllm:time_to_first_token_seconds` | TTFT histogram |
-| `vllm:time_per_output_token_seconds` | TPOT histogram |
+| `vllm:request_time_per_output_token_seconds` | TPOT histogram — time per output token, averaged within a request |
+| `vllm:inter_token_latency_seconds` | ITL histogram — the gap between consecutive tokens |
+
+**Check these names against your engine before building on them.** This project
+shipped asking for `vllm:time_per_output_token_seconds`, which 0.29.0 does not
+emit; §7.10 has what that cost. The last two rows are different questions, not
+synonyms: a tail in ITL that TPOT does not show means the stutter is inside
+requests rather than between them.
 
 **Why histograms rather than averages.** Latency distributions are heavy-tailed.
 A mean TTFT of 200 ms is compatible with a p99 of 8 seconds, and the p99 is what
@@ -548,9 +559,10 @@ reason this project addresses the engine over HTTP (ADR-0003).
 
 ## 6. Current status — be precise about this
 
-Phases 0 through 3 are complete. Phase 1 ran on real GPU hardware; Phases 2 and
-3 were measured on a laptop against a fake upstream, and the distinction matters
-more than the checkmarks.
+Phases 0 through 3 are complete, and all three of the "but it has never met
+real hardware" caveats that Phase 3 shipped with have been closed. Be precise
+about which numbers came from where anyway — that distinction still matters more
+than the checkmarks.
 
 **Measured on Kaggle, 19 Sep 2026** — Tesla T4 (SM 7.5, 15 GB), vLLM 0.29.0,
 Qwen2.5-1.5B-Instruct in float16:
@@ -608,14 +620,46 @@ With 8 concurrent streams open, `/metrics` reported 8 in flight, and 0 once the
 last chunk was relayed. That is the Phase 2 admission bug made observable from
 outside the process.
 
+### Phase 3, on real hardware
+
+The gateway fronted vLLM 0.29.0 on a Tesla T4 and Phase 1's batching proof was
+re-run *through* it. Same engine configuration — TRITON_ATTN, 8.62 GiB KV cache,
+78.84× concurrency — so this is a comparison, not two unrelated numbers.
+
+| | Direct to engine (Phase 1) | Through the gateway (Phase 3) |
+|---|---|---|
+| TTFT, single request | 26 ms | **33 ms** |
+| TPOT | 14.6 ms/token | 15.1 ms/token |
+| 8 concurrent, wall clock | 1.04 s | 1.069 s |
+| **Speedup over serial** | **7.3×** | **7.38×** |
+| Output throughput | 493 tok/s | 479 tok/s |
+
+**How to present that.** The gateway costs about 7 ms of TTFT and under 3% of
+throughput, and continuous batching is untouched by it. Volunteer the
+corroboration rather than the single number: an independent measurement on a
+laptop against a fake upstream put the same cost at 7.5 ms. Two machines, two
+upstreams, one answer — that is an HTTP hop, not instrumentation. Then volunteer
+the weakness: the two columns come from different sessions, one run each, so the
+0.029 s difference in wall clock is inside what a single sample cannot resolve.
+
+The engine's scheduler and the gateway's admission gauge independently reported
+**8 in flight** during the run, from separate processes. Queue depth stayed 0 and
+the KV cache peaked at 0.17%, which is the same story Phase 1 told: the batch was
+nearly empty.
+
+Prometheus 2.55.1 and Grafana 11.3.1 have been started against the committed
+configuration: 11/11 dashboard panels returning data, 13 rules loaded with none
+in error, the datasource resolved by uid and a query answered through Grafana.
+
 **Still not done, and say so:** only one concurrency point has been measured, so
-there are no percentile curves yet. **No engine metrics have ever been scraped
-from a running vLLM** — the parser and selection rules are tested against a
-hand-written fixture, and the gateway has still never fronted a real engine.
-Prometheus and Grafana have never been started; there is no Docker on the
-development machine. The `local-cpu` profile has never run a real vLLM. Tensor
-parallelism is untested. Phases 4–9 — benchmark harness, tuning,
-quantisation, routing, SGLang, report — are ahead.
+there are still no percentile curves and no goodput — that is Phase 4, and
+`smoke` is labelled a sanity check precisely because it is closed-loop. The
+Phase 1 and Phase 3 numbers are unpaired. Tensor parallelism is untested; two
+T4s were attached and `colab-t4` uses one. `local-cpu` has still never run a
+real vLLM, and will not without a source build — vLLM ships CUDA-only Linux
+wheels and V1 removed `--device`. There is no tracing, which ADR-0007 defers
+deliberately. Phases 4–9 — benchmark harness, tuning, quantisation, routing,
+SGLang, report — are ahead.
 
 > Being precise about what is proven versus what is merely written is the single
 > most credible thing you can do. Overstating it is the one thing that will sink
@@ -788,6 +832,38 @@ that every later row inherited. Each path is now a median of five runs after a
 discarded warm-up, and the direct row fell from 39 ms to 5.5 ms. **The first
 sample of anything measures the ordering, not the thing.**
 
+### 7.10 A metric name that was wrong, and nothing failed
+
+Phase 3 declared vLLM's TPOT histogram as
+`vllm:time_per_output_token_seconds`. vLLM 0.29.0 emits
+`vllm:request_time_per_output_token_seconds` and nothing at all by the assumed
+name.
+
+The interesting part is not the typo. It is that **three separate mechanisms
+reported it as health**: the snapshot listed the signal as missing, which reads
+like an engine that has served nothing yet; the Grafana panel rendered "No
+data", which reads like an idle system; and the alert built on it evaluated
+against an empty series forever, which reads like nothing being wrong. No
+exception, no log line, no red tick.
+
+It survived a full test suite because the synthetic fixture and the code were
+written from the same assumption by the same person, so they agreed with each
+other. The dashboard test made it worse: it checked that every panel references
+a metric the project *declares*, which is internal consistency, not reality.
+
+*Fix:* a capture from a real engine is now a fixture, and a test asserts every
+declared signal appears in it. The dashboard's queries are executed against a
+live Prometheus rather than pattern-matched.
+*Payoff:* the same capture revealed `vllm:inter_token_latency_seconds` as a
+*separate* metric — ITL, the gap between consecutive tokens, against TPOT, that
+gap averaged within a request. Half the streaming-latency picture was not being
+collected at all.
+*Lesson:* **"absent" is not a failure state that anything reports.** When the
+consequence of being wrong is silence, no amount of testing against your own
+assumptions will find it; only the real endpoint will. This is the fourth time
+this project has met the same lesson, and the first time it cost a shipped
+feature rather than a debugging afternoon.
+
 ---
 
 ## 8. Questions you will get, and how to answer
@@ -876,23 +952,30 @@ sample of anything measures the ordering, not the thing.**
 > what was measured, so that can never be silent.
 
 **"Is it finished?"**
-> No, and the gaps are specific. Phases 0 through 3 are built: profiles and
-> preflight, vLLM serving with continuous batching proven on a real T4, the
-> gateway, and the metrics layer. But the gateway has never fronted a real
-> engine, no metrics have ever been scraped from a running vLLM, and Prometheus
-> and Grafana have never been started — all three were measured against a fake
-> upstream or a hand-written fixture on a laptop with no GPU and no Docker.
-> Phases 4–9 — the benchmark harness, tuning, quantisation, routing, the SGLang
-> comparison and the report — are ahead.
+> No, but Phases 0 through 3 are, including on real hardware: profiles and
+> preflight, vLLM serving with continuous batching proven on a T4, the gateway —
+> which has now fronted that engine and costs about 7 ms of TTFT — and the
+> metrics layer, verified against a capture from the real engine with Prometheus
+> and Grafana both started against the committed configuration. CI runs lint,
+> types, tests, the measurement script and promtool.
+>
+> What is genuinely missing is Phase 4 onwards: there is still exactly one
+> concurrency point, closed-loop, so no latency-versus-arrival-rate curve and no
+> goodput. Then tuning, quantisation, routing, the SGLang comparison and the
+> report.
 
 **"What is the weakest part of the project right now?"**
-> That Phase 3's engine-side code has only met a synthetic fixture. The parser
-> agrees with `prometheus_client`'s own on that fixture and the selection rules
-> are tested, but the project's own meta-lesson — hit three times now — is that
-> code exercised only by mocks is not exercised. vLLM renamed
-> `gpu_cache_usage_perc` to `kv_cache_usage_perc` between engine versions and I
-> accept both spellings precisely because I have not confirmed which one 0.29.0
-> emits. That is defensive, not verified, and the difference matters.
+> That every number comes from a single run at a single concurrency point. The
+> measurements are real and reproducible, but there is no distribution behind
+> any of them — the Phase 1 and Phase 3 columns I quote for gateway cost are
+> from different sessions, one run each, so strictly they support the 7 ms TTFT
+> figure only because an independent measurement on other hardware agrees. Phase
+> 4 exists to replace all of that with curves.
+>
+> The second-weakest part was worse and is now fixed: the engine-side metrics
+> code had only ever met a fixture I wrote myself, and it turned out to be
+> asking for a TPOT metric by a name vLLM does not use. Nothing failed — that is
+> the whole problem with it.
 
 ---
 
@@ -1045,7 +1128,7 @@ inferstack doctor --profile colab-t4 --strict
 Run the checks:
 
 ```bash
-pytest              # 271 tests
+pytest              # 302 tests
 ruff check .        # lint (incl. bandit security rules)
 ```
 
