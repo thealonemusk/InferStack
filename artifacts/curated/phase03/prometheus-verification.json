@@ -1,0 +1,295 @@
+{
+  "verified_at": "2026-09-20T11:09:02+00:00",
+  "prometheus_version": [],
+  "engine_metrics_source": "tests/fixtures/vllm_metrics_real.txt",
+  "engine_metrics_is_a_real_capture": true,
+  "targets": {
+    "inferstack-gateway": "up",
+    "prometheus": "unknown",
+    "vllm": "up"
+  },
+  "load": {
+    "completed": 140,
+    "abandoned_streams": 35
+  },
+  "dashboard": {
+    "panels": [
+      {
+        "title": "Running batch and queue depth",
+        "targets": [
+          {
+            "legend": "running (batch size)",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          },
+          {
+            "legend": "waiting (queue depth)",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "KV cache utilisation",
+        "targets": [
+          {
+            "legend": "kv cache",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          },
+          {
+            "legend": "kv cache (v0)",
+            "series": 0,
+            "sample": null,
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "TTFT - engine",
+        "targets": [
+          {
+            "legend": "p50",
+            "series": 1,
+            "sample": "0.049999999999999996",
+            "error": null
+          },
+          {
+            "legend": "p95",
+            "series": 1,
+            "sample": "1.749999999999999",
+            "error": null
+          },
+          {
+            "legend": "p99",
+            "series": 1,
+            "sample": "2.3499999999999996",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "TPOT and ITL - engine",
+        "targets": [
+          {
+            "legend": "TPOT p50",
+            "series": 1,
+            "sample": "0.0175",
+            "error": null
+          },
+          {
+            "legend": "TPOT p95",
+            "series": 1,
+            "sample": "0.02425",
+            "error": null
+          },
+          {
+            "legend": "TPOT p99",
+            "series": 1,
+            "sample": "0.024850000000000004",
+            "error": null
+          },
+          {
+            "legend": "ITL p99",
+            "series": 1,
+            "sample": "0.024849738219895286",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Preemptions",
+        "targets": [
+          {
+            "legend": "preemptions/s",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Token throughput",
+        "targets": [
+          {
+            "legend": "output tok/s",
+            "series": 1,
+            "sample": "172.81533333333334",
+            "error": null
+          },
+          {
+            "legend": "prompt tok/s",
+            "series": 1,
+            "sample": "156.91533333333334",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Gateway admission",
+        "targets": [
+          {
+            "legend": "in flight",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          },
+          {
+            "legend": "waiting for a slot",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          },
+          {
+            "legend": "capacity",
+            "series": 1,
+            "sample": "512",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Gateway shed rate",
+        "targets": [
+          {
+            "legend": "shed/s",
+            "series": 1,
+            "sample": "0",
+            "error": null
+          },
+          {
+            "legend": "admitted/s",
+            "series": 1,
+            "sample": "2.996385117263269",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Gateway requests by status",
+        "targets": [
+          {
+            "legend": "{{status}}",
+            "series": 1,
+            "sample": "3.121865732918484",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Gateway overhead on first byte",
+        "targets": [
+          {
+            "legend": "gateway p95",
+            "series": 1,
+            "sample": "0.0336",
+            "error": null
+          },
+          {
+            "legend": "gateway p99",
+            "series": 1,
+            "sample": "0.03871999999999999",
+            "error": null
+          },
+          {
+            "legend": "engine p95",
+            "series": 1,
+            "sample": "1.749999999999999",
+            "error": null
+          },
+          {
+            "legend": "engine p99",
+            "series": 1,
+            "sample": "2.35",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      },
+      {
+        "title": "Abandoned streams",
+        "targets": [
+          {
+            "legend": "abandoned/s",
+            "series": 1,
+            "sample": "0.5688379700555815",
+            "error": null
+          }
+        ],
+        "ok": true,
+        "errors": []
+      }
+    ],
+    "panels_with_data": 11,
+    "panels_total": 11,
+    "panels_without_data": [],
+    "query_errors": {}
+  },
+  "rules": {
+    "groups": [
+      "inferstack.availability",
+      "inferstack.gateway",
+      "inferstack.latency",
+      "inferstack.recording",
+      "inferstack.saturation"
+    ],
+    "recording_rules": [
+      "inferstack:itl_seconds:p99",
+      "inferstack:tpot_seconds:p99",
+      "inferstack:ttft_seconds:p99"
+    ],
+    "alerting_rules": [
+      "EngineDown",
+      "EnginePreempting",
+      "GatewayAtCapacity",
+      "GatewayDown",
+      "GatewaySheddingLoad",
+      "KVCacheNearlyFull",
+      "QueueDepthSustained",
+      "StreamsBeingAbandoned",
+      "TimePerOutputTokenSlow",
+      "TimeToFirstTokenSlow"
+    ],
+    "rules_with_errors": [],
+    "recorded_values": {
+      "inferstack:ttft_seconds:p99": "2.3499999999999988",
+      "inferstack:tpot_seconds:p99": "0.024849999999999997",
+      "inferstack:itl_seconds:p99": "0.02484973821989529"
+    },
+    "alert_states": {
+      "EngineDown": "inactive",
+      "EnginePreempting": "inactive",
+      "GatewayAtCapacity": "inactive",
+      "GatewayDown": "inactive",
+      "GatewaySheddingLoad": "inactive",
+      "KVCacheNearlyFull": "inactive",
+      "QueueDepthSustained": "inactive",
+      "StreamsBeingAbandoned": "pending",
+      "TimePerOutputTokenSlow": "inactive",
+      "TimeToFirstTokenSlow": "pending"
+    },
+    "firing": []
+  }
+}
