@@ -1,0 +1,1349 @@
+{
+  "phase": 3,
+  "branch": "phase-03-observability",
+  "profile": "colab-t4",
+  "steps": {
+    "install": {
+      "ok": true,
+      "seconds": 293.7,
+      "vllm_version": "0.29.0"
+    },
+    "doctor": {
+      "environment": {
+        "platform": "Linux",
+        "platform_release": "6.12.90+",
+        "python_version": "3.12.13",
+        "in_wsl": false,
+        "in_container": true,
+        "cpu": {
+          "model": "Intel(R) Xeon(R) CPU @ 2.00GHz",
+          "cores": 2,
+          "threads": 4,
+          "flags": [
+            "avx",
+            "avx2",
+            "avx512bw",
+            "avx512f",
+            "f16c"
+          ]
+        },
+        "memory": {
+          "ram_total_gb": 31.35,
+          "ram_available_gb": 30.26,
+          "disk_free_gb": 19.5
+        },
+        "gpus": [
+          {
+            "index": 0,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          },
+          {
+            "index": 1,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          }
+        ],
+        "docker_available": false,
+        "capabilities": {
+          "cuda": true,
+          "tensor_parallel": true,
+          "bfloat16": false,
+          "flash_attention_2": false,
+          "int4_marlin": false,
+          "fp8_quantization": false
+        },
+        "warnings": [
+          "Tesla T4 is compute capability 7.5: no bfloat16 support. Set engine.dtype=float16 explicitly - leaving it on 'auto' will make vLLM refuse to load a bf16 checkpoint."
+        ],
+        "notes": [
+          "Compute capability 7.5 is below 8.0, so vLLM's FlashAttention-2 backend is unavailable. Measured on vLLM 0.29 / T4: it selects TRITON_ATTN (candidates were TRITON_ATTN and FLEX_ATTENTION). Record which attention backend was active alongside every benchmark result - results are not comparable across backends.",
+          "No native FP8 tensor cores. Phase 6 quantisation should target AWQ or GPTQ int4 rather than FP8.",
+          "Marlin int4 kernels need compute capability 8.0+. AWQ/GPTQ still run here, on the slower generic kernels - factor that into any quantisation speedup claim.",
+          "2 GPUs visible: tensor_parallel_size up to 2 is testable in Phase 6.",
+          "15 GB of VRAM. A ~1.5B model in float16 leaves plenty of room for KV cache, which is what actually stresses continuous batching. Prefer a small model with a large batch over a large model."
+        ],
+        "recommended_profile": "kaggle-2xt4"
+      },
+      "issues": [
+        {
+          "severity": "info",
+          "field": "engine.backend",
+          "message": "FlashAttention-2 is unavailable on this GPU generation."
+        }
+      ]
+    },
+    "stripped_flags": [
+      "--device"
+    ],
+    "engine_command": [
+      "vllm",
+      "serve",
+      "Qwen/Qwen2.5-1.5B-Instruct",
+      "--served-model-name",
+      "qwen2.5-1.5b",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8000",
+      "--dtype",
+      "float16",
+      "--max-model-len",
+      "4096",
+      "--max-num-seqs",
+      "256",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--enable-chunked-prefill"
+    ],
+    "engine": {
+      "ok": true,
+      "startup_seconds": 158.4
+    },
+    "engine_metrics_idle": {
+      "bytes": 47416,
+      "sample_count": 390,
+      "distinct_names": 110,
+      "signals_found": {
+        "running": {
+          "alias_used": "vllm:num_requests_running",
+          "aliases_declared": [
+            "vllm:num_requests_running"
+          ],
+          "exposed_as": "vllm:num_requests_running",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "waiting": {
+          "alias_used": "vllm:num_requests_waiting",
+          "aliases_declared": [
+            "vllm:num_requests_waiting"
+          ],
+          "exposed_as": "vllm:num_requests_waiting",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "kv_cache_usage": {
+          "alias_used": "vllm:kv_cache_usage_perc",
+          "aliases_declared": [
+            "vllm:kv_cache_usage_perc",
+            "vllm:gpu_cache_usage_perc"
+          ],
+          "exposed_as": "vllm:kv_cache_usage_perc",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "preemptions": {
+          "alias_used": "vllm:num_preemptions_total",
+          "aliases_declared": [
+            "vllm:num_preemptions_total",
+            "vllm:num_preemptions"
+          ],
+          "exposed_as": "vllm:num_preemptions_total",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "ttft": {
+          "alias_used": "vllm:time_to_first_token_seconds",
+          "aliases_declared": [
+            "vllm:time_to_first_token_seconds"
+          ],
+          "exposed_as": "vllm:time_to_first_token_seconds_count",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "e2e_latency": {
+          "alias_used": "vllm:e2e_request_latency_seconds",
+          "aliases_declared": [
+            "vllm:e2e_request_latency_seconds"
+          ],
+          "exposed_as": "vllm:e2e_request_latency_seconds_count",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "queue_time": {
+          "alias_used": "vllm:request_queue_time_seconds",
+          "aliases_declared": [
+            "vllm:request_queue_time_seconds"
+          ],
+          "exposed_as": "vllm:request_queue_time_seconds_count",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "prompt_tokens": {
+          "alias_used": "vllm:prompt_tokens_total",
+          "aliases_declared": [
+            "vllm:prompt_tokens_total",
+            "vllm:prompt_tokens"
+          ],
+          "exposed_as": "vllm:prompt_tokens_total",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "generation_tokens": {
+          "alias_used": "vllm:generation_tokens_total",
+          "aliases_declared": [
+            "vllm:generation_tokens_total",
+            "vllm:generation_tokens"
+          ],
+          "exposed_as": "vllm:generation_tokens_total",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        }
+      },
+      "signals_absent": [
+        "tpot"
+      ],
+      "label_keys_seen": [
+        "_block_size_resolved",
+        "block_size",
+        "cache_dtype",
+        "enable_prefix_caching",
+        "engine",
+        "finished_reason",
+        "generation",
+        "gpu_memory_utilization",
+        "implementation",
+        "is_attention_free",
+        "kv_cache_dtype_skip_layers",
+        "kv_cache_layout",
+        "kv_cache_max_concurrency",
+        "kv_cache_memory_bytes",
+        "kv_cache_size_tokens",
+        "kv_offloading_backend",
+        "kv_offloading_size",
+        "kv_sharing_fast_prefill",
+        "major",
+        "mamba_block_size",
+        "mamba_cache_dtype",
+        "mamba_cache_mode",
+        "mamba_page_size_padded",
+        "mamba_ssm_cache_dtype",
+        "minor",
+        "model_name",
+        "num_cpu_blocks",
+        "num_gpu_blocks",
+        "num_gpu_blocks_override",
+        "patchlevel",
+        "prefix_cache_retention_interval",
+        "prefix_caching_hash_algo",
+        "prefix_match_unit",
+        "reason",
+        "replayssm_buffer_len",
+        "skip_page_size_padded",
+        "sleep_state",
+        "sliding_window",
+        "source",
+        "use_kda_recoverssm",
+        "use_replayssm",
+        "user_specified_block_size",
+        "user_specified_mamba_block_size",
+        "version"
+      ],
+      "snapshot": {
+        "url": "http://127.0.0.1:8000/metrics",
+        "scraped_at": 1789901967.720931,
+        "sample_count": 390,
+        "missing": [
+          "tpot"
+        ],
+        "values": {
+          "running": 0.0,
+          "waiting": 0.0,
+          "kv_cache_usage": 0.0,
+          "preemptions": 0.0,
+          "prompt_tokens": 0.0,
+          "generation_tokens": 0.0
+        },
+        "histograms": {
+          "ttft": {
+            "name": "vllm:time_to_first_token_seconds",
+            "labels": {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            },
+            "count": 0.0,
+            "sum": 0.0,
+            "mean": null,
+            "p50": null,
+            "p90": null,
+            "p95": null,
+            "p99": null,
+            "buckets": [
+              [
+                0.001,
+                0.0
+              ],
+              [
+                0.005,
+                0.0
+              ],
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.02,
+                0.0
+              ],
+              [
+                0.04,
+                0.0
+              ],
+              [
+                0.06,
+                0.0
+              ],
+              [
+                0.08,
+                0.0
+              ],
+              [
+                0.1,
+                0.0
+              ],
+              [
+                0.25,
+                0.0
+              ],
+              [
+                0.5,
+                0.0
+              ],
+              [
+                0.75,
+                0.0
+              ],
+              [
+                1.0,
+                0.0
+              ],
+              [
+                2.5,
+                0.0
+              ],
+              [
+                5.0,
+                0.0
+              ],
+              [
+                7.5,
+                0.0
+              ],
+              [
+                10.0,
+                0.0
+              ],
+              [
+                20.0,
+                0.0
+              ],
+              [
+                40.0,
+                0.0
+              ],
+              [
+                80.0,
+                0.0
+              ],
+              [
+                160.0,
+                0.0
+              ],
+              [
+                640.0,
+                0.0
+              ],
+              [
+                2560.0,
+                0.0
+              ],
+              [
+                "+Inf",
+                0.0
+              ]
+            ]
+          },
+          "e2e_latency": {
+            "name": "vllm:e2e_request_latency_seconds",
+            "labels": {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            },
+            "count": 0.0,
+            "sum": 0.0,
+            "mean": null,
+            "p50": null,
+            "p90": null,
+            "p95": null,
+            "p99": null,
+            "buckets": [
+              [
+                0.3,
+                0.0
+              ],
+              [
+                0.5,
+                0.0
+              ],
+              [
+                0.8,
+                0.0
+              ],
+              [
+                1.0,
+                0.0
+              ],
+              [
+                1.5,
+                0.0
+              ],
+              [
+                2.0,
+                0.0
+              ],
+              [
+                2.5,
+                0.0
+              ],
+              [
+                5.0,
+                0.0
+              ],
+              [
+                10.0,
+                0.0
+              ],
+              [
+                15.0,
+                0.0
+              ],
+              [
+                20.0,
+                0.0
+              ],
+              [
+                30.0,
+                0.0
+              ],
+              [
+                40.0,
+                0.0
+              ],
+              [
+                50.0,
+                0.0
+              ],
+              [
+                60.0,
+                0.0
+              ],
+              [
+                120.0,
+                0.0
+              ],
+              [
+                240.0,
+                0.0
+              ],
+              [
+                480.0,
+                0.0
+              ],
+              [
+                960.0,
+                0.0
+              ],
+              [
+                1920.0,
+                0.0
+              ],
+              [
+                7680.0,
+                0.0
+              ],
+              [
+                "+Inf",
+                0.0
+              ]
+            ]
+          },
+          "queue_time": {
+            "name": "vllm:request_queue_time_seconds",
+            "labels": {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            },
+            "count": 0.0,
+            "sum": 0.0,
+            "mean": null,
+            "p50": null,
+            "p90": null,
+            "p95": null,
+            "p99": null,
+            "buckets": [
+              [
+                0.3,
+                0.0
+              ],
+              [
+                0.5,
+                0.0
+              ],
+              [
+                0.8,
+                0.0
+              ],
+              [
+                1.0,
+                0.0
+              ],
+              [
+                1.5,
+                0.0
+              ],
+              [
+                2.0,
+                0.0
+              ],
+              [
+                2.5,
+                0.0
+              ],
+              [
+                5.0,
+                0.0
+              ],
+              [
+                10.0,
+                0.0
+              ],
+              [
+                15.0,
+                0.0
+              ],
+              [
+                20.0,
+                0.0
+              ],
+              [
+                30.0,
+                0.0
+              ],
+              [
+                40.0,
+                0.0
+              ],
+              [
+                50.0,
+                0.0
+              ],
+              [
+                60.0,
+                0.0
+              ],
+              [
+                120.0,
+                0.0
+              ],
+              [
+                240.0,
+                0.0
+              ],
+              [
+                480.0,
+                0.0
+              ],
+              [
+                960.0,
+                0.0
+              ],
+              [
+                1920.0,
+                0.0
+              ],
+              [
+                7680.0,
+                0.0
+              ],
+              [
+                "+Inf",
+                0.0
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "gateway": {
+      "ok": true,
+      "startup_seconds": 1.01,
+      "ready": {
+        "status": "ready",
+        "upstream": "http://127.0.0.1:8000/v1",
+        "upstream_healthy": true,
+        "in_flight": 0,
+        "waiting": 0,
+        "capacity": 512
+      },
+      "upstream": "http://127.0.0.1:8000/v1"
+    },
+    "gateway_metrics_idle": {
+      "bytes": 6347,
+      "series": 48,
+      "in_flight": "inferstack_gateway_in_flight_requests 0.0",
+      "capacity": "inferstack_gateway_capacity_requests 512.0",
+      "info": "inferstack_gateway_info{engine_backend=\"vllm\",model=\"qwen2.5-1.5b\",profile=\"colab-t4\",version=\"0.1.0\"} 1.0"
+    },
+    "smoke_through_gateway": {
+      "model": "qwen2.5-1.5b",
+      "served_models": [
+        "qwen2.5-1.5b"
+      ],
+      "concurrency": 8,
+      "max_tokens": 64,
+      "error": null,
+      "baseline": {
+        "ok": true,
+        "error": null,
+        "status_code": 200,
+        "finish_reason": "length",
+        "prompt_tokens": 53,
+        "completion_tokens": 64,
+        "ttft_s": 0.033002304999968146,
+        "tpot_s": 0.015106261095238119,
+        "e2e_s": 0.9857976170000029,
+        "output_tokens_observed": 64
+      },
+      "wall_clock_s": 1.0686,
+      "serial_estimate_s": 7.8864,
+      "batching_speedup": 7.38,
+      "verdict": "requests are batched, well short of saturation",
+      "successes": 8,
+      "failures": 0,
+      "output_tokens": 512,
+      "output_throughput_tok_s": 479.1,
+      "ttft_s": {
+        "p50": 0.07532737000008183,
+        "p95": 0.07669173800002227
+      },
+      "tpot_s": {
+        "median": 0.01567634374603203
+      },
+      "errors": []
+    },
+    "sampling": {
+      "samples": 12,
+      "interval_s": 0.25,
+      "peaks": {
+        "running": 8.0,
+        "waiting": 0.0,
+        "kv_cache_usage": 0.001734132685923817,
+        "inferstack_gateway_in_flight_requests": 8.0
+      }
+    },
+    "engine_metrics_loaded": {
+      "bytes": 51036,
+      "sample_count": 420,
+      "distinct_names": 122,
+      "signals_found": {
+        "running": {
+          "alias_used": "vllm:num_requests_running",
+          "aliases_declared": [
+            "vllm:num_requests_running"
+          ],
+          "exposed_as": "vllm:num_requests_running",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "waiting": {
+          "alias_used": "vllm:num_requests_waiting",
+          "aliases_declared": [
+            "vllm:num_requests_waiting"
+          ],
+          "exposed_as": "vllm:num_requests_waiting",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "kv_cache_usage": {
+          "alias_used": "vllm:kv_cache_usage_perc",
+          "aliases_declared": [
+            "vllm:kv_cache_usage_perc",
+            "vllm:gpu_cache_usage_perc"
+          ],
+          "exposed_as": "vllm:kv_cache_usage_perc",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "preemptions": {
+          "alias_used": "vllm:num_preemptions_total",
+          "aliases_declared": [
+            "vllm:num_preemptions_total",
+            "vllm:num_preemptions"
+          ],
+          "exposed_as": "vllm:num_preemptions_total",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "ttft": {
+          "alias_used": "vllm:time_to_first_token_seconds",
+          "aliases_declared": [
+            "vllm:time_to_first_token_seconds"
+          ],
+          "exposed_as": "vllm:time_to_first_token_seconds_count",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "e2e_latency": {
+          "alias_used": "vllm:e2e_request_latency_seconds",
+          "aliases_declared": [
+            "vllm:e2e_request_latency_seconds"
+          ],
+          "exposed_as": "vllm:e2e_request_latency_seconds_count",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "queue_time": {
+          "alias_used": "vllm:request_queue_time_seconds",
+          "aliases_declared": [
+            "vllm:request_queue_time_seconds"
+          ],
+          "exposed_as": "vllm:request_queue_time_seconds_count",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "prompt_tokens": {
+          "alias_used": "vllm:prompt_tokens_total",
+          "aliases_declared": [
+            "vllm:prompt_tokens_total",
+            "vllm:prompt_tokens"
+          ],
+          "exposed_as": "vllm:prompt_tokens_total",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        },
+        "generation_tokens": {
+          "alias_used": "vllm:generation_tokens_total",
+          "aliases_declared": [
+            "vllm:generation_tokens_total",
+            "vllm:generation_tokens"
+          ],
+          "exposed_as": "vllm:generation_tokens_total",
+          "label_sets": [
+            {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            }
+          ]
+        }
+      },
+      "signals_absent": [
+        "tpot"
+      ],
+      "label_keys_seen": [
+        "_block_size_resolved",
+        "block_size",
+        "cache_dtype",
+        "enable_prefix_caching",
+        "engine",
+        "finished_reason",
+        "generation",
+        "gpu_memory_utilization",
+        "handler",
+        "implementation",
+        "is_attention_free",
+        "kv_cache_dtype_skip_layers",
+        "kv_cache_layout",
+        "kv_cache_max_concurrency",
+        "kv_cache_memory_bytes",
+        "kv_cache_size_tokens",
+        "kv_offloading_backend",
+        "kv_offloading_size",
+        "kv_sharing_fast_prefill",
+        "major",
+        "mamba_block_size",
+        "mamba_cache_dtype",
+        "mamba_cache_mode",
+        "mamba_page_size_padded",
+        "mamba_ssm_cache_dtype",
+        "method",
+        "minor",
+        "model_name",
+        "num_cpu_blocks",
+        "num_gpu_blocks",
+        "num_gpu_blocks_override",
+        "patchlevel",
+        "prefix_cache_retention_interval",
+        "prefix_caching_hash_algo",
+        "prefix_match_unit",
+        "reason",
+        "replayssm_buffer_len",
+        "skip_page_size_padded",
+        "sleep_state",
+        "sliding_window",
+        "source",
+        "status",
+        "use_kda_recoverssm",
+        "use_replayssm",
+        "user_specified_block_size",
+        "user_specified_mamba_block_size",
+        "version"
+      ],
+      "snapshot": {
+        "url": "http://127.0.0.1:8000/metrics",
+        "scraped_at": 1789901972.1525042,
+        "sample_count": 420,
+        "missing": [
+          "tpot"
+        ],
+        "values": {
+          "running": 0.0,
+          "waiting": 0.0,
+          "kv_cache_usage": 0.0,
+          "preemptions": 0.0,
+          "prompt_tokens": 530.0,
+          "generation_tokens": 584.0
+        },
+        "histograms": {
+          "ttft": {
+            "name": "vllm:time_to_first_token_seconds",
+            "labels": {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            },
+            "count": 10.0,
+            "sum": 1.4721317291259766,
+            "mean": 0.14721317291259767,
+            "p50": 0.05,
+            "p90": 0.06,
+            "p95": 1.75,
+            "p99": 2.3500000000000005,
+            "buckets": [
+              [
+                0.001,
+                0.0
+              ],
+              [
+                0.005,
+                0.0
+              ],
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.02,
+                0.0
+              ],
+              [
+                0.04,
+                1.0
+              ],
+              [
+                0.06,
+                9.0
+              ],
+              [
+                0.08,
+                9.0
+              ],
+              [
+                0.1,
+                9.0
+              ],
+              [
+                0.25,
+                9.0
+              ],
+              [
+                0.5,
+                9.0
+              ],
+              [
+                0.75,
+                9.0
+              ],
+              [
+                1.0,
+                9.0
+              ],
+              [
+                2.5,
+                10.0
+              ],
+              [
+                5.0,
+                10.0
+              ],
+              [
+                7.5,
+                10.0
+              ],
+              [
+                10.0,
+                10.0
+              ],
+              [
+                20.0,
+                10.0
+              ],
+              [
+                40.0,
+                10.0
+              ],
+              [
+                80.0,
+                10.0
+              ],
+              [
+                160.0,
+                10.0
+              ],
+              [
+                640.0,
+                10.0
+              ],
+              [
+                2560.0,
+                10.0
+              ],
+              [
+                "+Inf",
+                10.0
+              ]
+            ]
+          },
+          "e2e_latency": {
+            "name": "vllm:e2e_request_latency_seconds",
+            "labels": {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            },
+            "count": 10.0,
+            "sum": 10.448294162750244,
+            "mean": 1.0448294162750245,
+            "p50": 1.2222222222222223,
+            "p90": 1.4444444444444444,
+            "p95": 1.4722222222222223,
+            "p99": 1.4944444444444445,
+            "buckets": [
+              [
+                0.3,
+                0.0
+              ],
+              [
+                0.5,
+                0.0
+              ],
+              [
+                0.8,
+                0.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                1.5,
+                10.0
+              ],
+              [
+                2.0,
+                10.0
+              ],
+              [
+                2.5,
+                10.0
+              ],
+              [
+                5.0,
+                10.0
+              ],
+              [
+                10.0,
+                10.0
+              ],
+              [
+                15.0,
+                10.0
+              ],
+              [
+                20.0,
+                10.0
+              ],
+              [
+                30.0,
+                10.0
+              ],
+              [
+                40.0,
+                10.0
+              ],
+              [
+                50.0,
+                10.0
+              ],
+              [
+                60.0,
+                10.0
+              ],
+              [
+                120.0,
+                10.0
+              ],
+              [
+                240.0,
+                10.0
+              ],
+              [
+                480.0,
+                10.0
+              ],
+              [
+                960.0,
+                10.0
+              ],
+              [
+                1920.0,
+                10.0
+              ],
+              [
+                7680.0,
+                10.0
+              ],
+              [
+                "+Inf",
+                10.0
+              ]
+            ]
+          },
+          "queue_time": {
+            "name": "vllm:request_queue_time_seconds",
+            "labels": {
+              "engine": "0",
+              "model_name": "qwen2.5-1.5b"
+            },
+            "count": 10.0,
+            "sum": 0.00024200799975915288,
+            "mean": 2.420079997591529e-05,
+            "p50": 0.15,
+            "p90": 0.27,
+            "p95": 0.285,
+            "p99": 0.297,
+            "buckets": [
+              [
+                0.3,
+                10.0
+              ],
+              [
+                0.5,
+                10.0
+              ],
+              [
+                0.8,
+                10.0
+              ],
+              [
+                1.0,
+                10.0
+              ],
+              [
+                1.5,
+                10.0
+              ],
+              [
+                2.0,
+                10.0
+              ],
+              [
+                2.5,
+                10.0
+              ],
+              [
+                5.0,
+                10.0
+              ],
+              [
+                10.0,
+                10.0
+              ],
+              [
+                15.0,
+                10.0
+              ],
+              [
+                20.0,
+                10.0
+              ],
+              [
+                30.0,
+                10.0
+              ],
+              [
+                40.0,
+                10.0
+              ],
+              [
+                50.0,
+                10.0
+              ],
+              [
+                60.0,
+                10.0
+              ],
+              [
+                120.0,
+                10.0
+              ],
+              [
+                240.0,
+                10.0
+              ],
+              [
+                480.0,
+                10.0
+              ],
+              [
+                960.0,
+                10.0
+              ],
+              [
+                1920.0,
+                10.0
+              ],
+              [
+                7680.0,
+                10.0
+              ],
+              [
+                "+Inf",
+                10.0
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "gateway_metrics_loaded": {
+      "bytes": 14908,
+      "series": [
+        "inferstack_gateway_requests_total{method=\"GET\",route=\"/health\",status=\"200\",stream=\"false\"} 2.0",
+        "inferstack_gateway_requests_total{method=\"GET\",route=\"/ready\",status=\"200\",stream=\"false\"} 1.0",
+        "inferstack_gateway_requests_total{method=\"GET\",route=\"/metrics\",status=\"200\",stream=\"false\"} 13.0",
+        "inferstack_gateway_requests_total{method=\"GET\",route=\"/v1/models\",status=\"200\",stream=\"false\"} 1.0",
+        "inferstack_gateway_requests_total{method=\"POST\",route=\"/v1/chat/completions\",status=\"200\",stream=\"true\"} 10.0",
+        "inferstack_gateway_requests_created{method=\"GET\",route=\"/health\",status=\"200\",stream=\"false\"} 1.7899019687312107e+09",
+        "inferstack_gateway_requests_created{method=\"GET\",route=\"/ready\",status=\"200\",stream=\"false\"} 1.789901968735977e+09",
+        "inferstack_gateway_requests_created{method=\"GET\",route=\"/metrics\",status=\"200\",stream=\"false\"} 1.7899019687394392e+09",
+        "inferstack_gateway_requests_created{method=\"GET\",route=\"/v1/models\",status=\"200\",stream=\"false\"} 1.78990196884029e+09",
+        "inferstack_gateway_requests_created{method=\"POST\",route=\"/v1/chat/completions\",status=\"200\",stream=\"true\"} 1.7899019689188352e+09",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.005\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.01\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.02\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.04\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.06\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.08\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.1\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.15\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.25\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.5\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"1.0\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"2.5\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"5.0\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"10.0\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"30.0\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"+Inf\",route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_count{route=\"/health\",stream=\"false\"} 2.0",
+        "inferstack_gateway_time_to_headers_seconds_sum{route=\"/health\",stream=\"false\"} 0.002637184000036541",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.005\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.01\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.02\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.04\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.06\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.08\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.1\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.15\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.25\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.5\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"1.0\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"2.5\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"5.0\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"10.0\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"30.0\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"+Inf\",route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_count{route=\"/ready\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_sum{route=\"/ready\",stream=\"false\"} 0.003376833000061197",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.005\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.01\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.02\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.04\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.06\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.08\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.1\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.15\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.25\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.5\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"1.0\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"2.5\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"5.0\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"10.0\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"30.0\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"+Inf\",route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_count{route=\"/metrics\",stream=\"false\"} 13.0",
+        "inferstack_gateway_time_to_headers_seconds_sum{route=\"/metrics\",stream=\"false\"} 0.02821275999997397",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.005\",route=\"/v1/models\",stream=\"false\"} 0.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.01\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.02\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.04\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.06\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.08\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.1\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.15\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.25\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.5\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"1.0\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"2.5\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"5.0\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"10.0\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"30.0\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"+Inf\",route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_count{route=\"/v1/models\",stream=\"false\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_sum{route=\"/v1/models\",stream=\"false\"} 0.006138841999927536",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.005\",route=\"/v1/chat/completions\",stream=\"true\"} 0.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.01\",route=\"/v1/chat/completions\",stream=\"true\"} 1.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.02\",route=\"/v1/chat/completions\",stream=\"true\"} 3.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.04\",route=\"/v1/chat/completions\",stream=\"true\"} 9.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.06\",route=\"/v1/chat/completions\",stream=\"true\"} 9.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.08\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.1\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.15\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.25\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"0.5\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"1.0\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"2.5\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"5.0\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"10.0\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"30.0\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_bucket{le=\"+Inf\",route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_count{route=\"/v1/chat/completions\",stream=\"true\"} 10.0",
+        "inferstack_gateway_time_to_headers_seconds_sum{route=\"/v1/chat/completions\",stream=\"true\"} 0.290018180999823",
+        "inferstack_gateway_time_to_headers_seconds_created{route=\"/health\",stream=\"false\"} 1.7899019687312412e+09",
+        "inferstack_gateway_time_to_headers_seconds_created{route=\"/ready\",stream=\"false\"} 1.7899019687360022e+09",
+        "inferstack_gateway_time_to_headers_seconds_created{route=\"/metrics\",stream=\"false\"} 1.7899019687394588e+09",
+        "inferstack_gateway_time_to_headers_seconds_created{route=\"/v1/models\",stream=\"false\"} 1.789901968840315e+09",
+        "inferstack_gateway_time_to_headers_seconds_created{route=\"/v1/chat/completions\",stream=\"true\"} 1.7899019689188685e+09",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"0.05\",route=\"/v1/chat/completions\"} 0.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"0.1\",route=\"/v1/chat/completions\"} 0.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"0.25\",route=\"/v1/chat/completions\"} 0.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"0.5\",route=\"/v1/chat/completions\"} 0.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"1.0\",route=\"/v1/chat/completions\"} 1.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"2.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"5.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"10.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"20.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"30.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"60.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"120.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"300.0\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_bucket{le=\"+Inf\",route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_count{route=\"/v1/chat/completions\"} 10.0",
+        "inferstack_gateway_stream_duration_seconds_sum{route=\"/v1/chat/completions\"} 10.598267453999824",
+        "inferstack_gateway_stream_duration_seconds_created{route=\"/v1/chat/completions\"} 1.7899019700158944e+09",
+        "inferstack_gateway_stream_chunks_total{route=\"/v1/chat/completions\"} 614.0",
+        "inferstack_gateway_stream_chunks_created{route=\"/v1/chat/completions\"} 1.789901970016014e+09",
+        "inferstack_gateway_info{engine_backend=\"vllm\",model=\"qwen2.5-1.5b\",profile=\"colab-t4\",version=\"0.1.0\"} 1.0",
+        "inferstack_gateway_in_flight_requests 0.0",
+        "inferstack_gateway_waiting_requests 0.0",
+        "inferstack_gateway_capacity_requests 512.0",
+        "inferstack_gateway_admitted_total 10.0",
+        "inferstack_gateway_rejected_total 0.0"
+      ]
+    },
+    "engine_highlights": [
+      "(APIServer pid=228) INFO 09-20 10:57:10 [api_utils.py:286] non-default args: {'model_tag': 'Qwen/Qwen2.5-1.5B-Instruct', 'host': '127.0.0.1', 'model': 'Qwen/Qwen2.5-1.5B-Instruct', 'dtype': 'float16', 'max_model_len': 4096, 'served_model_name': ['qwen2.5-1.5b'], 'gpu_memory_utilization': 0.9, 'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True}",
+      "(EngineCore pid=281) INFO 09-20 10:57:52 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+      "(EngineCore pid=281) INFO 09-20 10:58:38 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/ae111ce08b/rank_0_0/backbone for vLLM's torch.compile",
+      "(EngineCore pid=281) INFO 09-20 10:58:52 [monitor.py:53] torch.compile took 19.69 s in total",
+      "(EngineCore pid=281) INFO 09-20 10:59:05 [gpu_worker.py:625] Available KV cache memory: 8.62 GiB",
+      "(EngineCore pid=281) INFO 09-20 10:59:05 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+      "(EngineCore pid=281) INFO 09-20 10:59:05 [kv_cache_utils.py:2032] GPU KV cache size: 322,944 tokens, Maximum concurrency for 4,096 tokens per request: 78.84x",
+      "(EngineCore pid=281) INFO 09-20 10:59:11 [gpu_worker.py:860] Free memory on device (14.46/14.56 GiB) on startup. Desired GPU memory utilization is (0.9, 13.11 GiB). Actual usage is 3.66 GiB for consumed memory (weights + non-torch), 0.82 GiB for peak activation, and 0.15 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=8942794445` (8.33 GiB) to fit into requested memory, or `--kv-cache-memory=10396428800` (9.68 GiB) to fully utilize gpu memory. Current kv cache memory in use is 8.62 GiB."
+    ]
+  },
+  "ok": true,
+  "total_seconds": 538.4
+}

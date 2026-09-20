@@ -1,0 +1,60 @@
+{
+  "platform": "Linux",
+  "platform_release": "6.12.90+",
+  "python_version": "3.12.13",
+  "in_wsl": false,
+  "in_container": true,
+  "cpu": {
+    "model": "Intel(R) Xeon(R) CPU @ 2.00GHz",
+    "cores": 2,
+    "threads": 4,
+    "flags": [
+      "avx",
+      "avx2",
+      "avx512bw",
+      "avx512f",
+      "f16c"
+    ]
+  },
+  "memory": {
+    "ram_total_gb": 31.35,
+    "ram_available_gb": 30.26,
+    "disk_free_gb": 19.5
+  },
+  "gpus": [
+    {
+      "index": 0,
+      "name": "Tesla T4",
+      "memory_total_gb": 15.0,
+      "compute_capability": "7.5",
+      "driver_version": "580.159.04"
+    },
+    {
+      "index": 1,
+      "name": "Tesla T4",
+      "memory_total_gb": 15.0,
+      "compute_capability": "7.5",
+      "driver_version": "580.159.04"
+    }
+  ],
+  "docker_available": false,
+  "capabilities": {
+    "cuda": true,
+    "tensor_parallel": true,
+    "bfloat16": false,
+    "flash_attention_2": false,
+    "int4_marlin": false,
+    "fp8_quantization": false
+  },
+  "warnings": [
+    "Tesla T4 is compute capability 7.5: no bfloat16 support. Set engine.dtype=float16 explicitly - leaving it on 'auto' will make vLLM refuse to load a bf16 checkpoint."
+  ],
+  "notes": [
+    "Compute capability 7.5 is below 8.0, so vLLM's FlashAttention-2 backend is unavailable. Measured on vLLM 0.29 / T4: it selects TRITON_ATTN (candidates were TRITON_ATTN and FLEX_ATTENTION). Record which attention backend was active alongside every benchmark result - results are not comparable across backends.",
+    "No native FP8 tensor cores. Phase 6 quantisation should target AWQ or GPTQ int4 rather than FP8.",
+    "Marlin int4 kernels need compute capability 8.0+. AWQ/GPTQ still run here, on the slower generic kernels - factor that into any quantisation speedup claim.",
+    "2 GPUs visible: tensor_parallel_size up to 2 is testable in Phase 6.",
+    "15 GB of VRAM. A ~1.5B model in float16 leaves plenty of room for KV cache, which is what actually stresses continuous batching. Prefer a small model with a large batch over a large model."
+  ],
+  "recommended_profile": "kaggle-2xt4"
+}
