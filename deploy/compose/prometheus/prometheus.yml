@@ -22,6 +22,15 @@ global:
   external_labels:
     stack: inferstack
 
+# Relative, not absolute: Prometheus resolves rule_files against the directory
+# holding this config, so `rules/*.yml` is /etc/prometheus/rules/*.yml in the
+# container AND deploy/compose/prometheus/rules/*.yml under `promtool check
+# config` in CI. An absolute container path would make that check silently
+# validate nothing.
+# Thresholds in there are defaults, not measured SLOs - see that file's header.
+rule_files:
+  - rules/*.yml
+
 scrape_configs:
   # The gateway: admission control, shed load, time to first byte as the client
   # experiences it. Nothing here is sensitive, so the scrape carries no

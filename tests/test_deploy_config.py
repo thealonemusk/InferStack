@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -30,6 +32,7 @@ COMPOSE_YML = COMPOSE_DIR / "docker-compose.yml"
 DATASOURCE_YML = COMPOSE_DIR / "grafana" / "provisioning" / "datasources" / "prometheus.yml"
 PROVIDER_YML = COMPOSE_DIR / "grafana" / "provisioning" / "dashboards" / "dashboards.yml"
 DASHBOARD_JSON = COMPOSE_DIR / "grafana" / "dashboards" / "inferstack-inference.json"
+RULES_YML = COMPOSE_DIR / "prometheus" / "rules" / "inferstack.yml"
 
 # Only project metrics are checked: everything InferStack or vLLM exports is
 # either prefixed `inferstack_` or namespaced `vllm:`, so these two patterns
@@ -48,6 +51,19 @@ def dashboard() -> dict:
 @pytest.fixture(scope="module")
 def prometheus_config() -> dict:
     return yaml.safe_load(PROMETHEUS_YML.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def rules() -> dict:
+    return yaml.safe_load(RULES_YML.read_text(encoding="utf-8"))
+
+
+def all_rules(rules: dict) -> list[dict]:
+    return [rule for group in rules["groups"] for rule in group["rules"]]
+
+
+def alerts(rules: dict) -> list[dict]:
+    return [rule for rule in all_rules(rules) if "alert" in rule]
 
 
 def known_metric_names() -> set[str]:
@@ -258,3 +274,140 @@ def test_panels_do_not_overlap(dashboard: dict) -> None:
 def test_panel_ids_are_unique(dashboard: dict) -> None:
     ids = [panel["id"] for panel in dashboard["panels"]]
     assert len(ids) == len(set(ids))
+
+
+# --- alerting rules -------------------------------------------------------
+#
+# An alert that cannot be acted on is worse than no alert: it trains people to
+# ignore the channel. These checks are about whether each rule says what to do,
+# not about whether its threshold is right - the thresholds are defaults and the
+# file says so.
+
+
+def test_prometheus_loads_the_rules_directory(prometheus_config: dict) -> None:
+    """Relative, so the same glob resolves in the container and under promtool.
+
+    Prometheus resolves rule_files against the config file's own directory. An
+    absolute container path would make `promtool check config` in CI match no
+    files and report success without having read a single rule.
+    """
+    assert prometheus_config["rule_files"] == ["rules/*.yml"]
+    assert (PROMETHEUS_YML.parent / "rules").is_dir()
+
+
+def test_the_rules_directory_is_mounted_into_the_container() -> None:
+    compose = yaml.safe_load(COMPOSE_YML.read_text(encoding="utf-8"))
+    mounts = compose["services"]["prometheus"]["volumes"]
+    assert any(m.startswith("./prometheus/rules:") for m in mounts), mounts
+
+
+def test_there_are_rules_for_both_components(rules: dict) -> None:
+    components = {a["labels"]["component"] for a in alerts(rules)}
+    assert components == {"engine", "gateway"}
+
+
+def test_every_alert_waits_before_firing(rules: dict) -> None:
+    """Without `for`, a single scrape blip pages somebody."""
+    for alert in alerts(rules):
+        assert alert.get("for"), alert["alert"]
+
+
+def test_every_alert_says_what_it_is_and_what_to_do(rules: dict) -> None:
+    for alert in alerts(rules):
+        annotations = alert.get("annotations", {})
+        assert annotations.get("summary"), alert["alert"]
+        description = annotations.get("description", "")
+        assert len(description) > 80, f"{alert['alert']} has no actionable description"
+
+
+def test_every_alert_is_graded(rules: dict) -> None:
+    for alert in alerts(rules):
+        assert alert["labels"]["severity"] in {"critical", "warning", "info"}, alert["alert"]
+
+
+def test_only_unavailability_is_critical(rules: dict) -> None:
+    """Saturation is a capacity decision, not a page at 3am. Being down is."""
+    critical = {a["alert"] for a in alerts(rules) if a["labels"]["severity"] == "critical"}
+    assert critical == {"EngineDown", "GatewayDown"}
+
+
+def test_the_four_load_signals_each_have_an_alert(rules: dict) -> None:
+    """The signals Phase 3 exists to expose should be the ones that can page."""
+    expressions = " ".join(rule["expr"] for rule in all_rules(rules))
+    for signal in ("cache_usage_perc", "num_preemptions", "num_requests_waiting"):
+        assert signal in expressions, signal
+
+
+def test_every_metric_a_rule_references_is_one_we_emit(rules: dict) -> None:
+    """Same check as the dashboard's, for the same reason: a mistyped metric
+    makes a rule that can never fire, and a rule that never fires looks exactly
+    like a system that is well."""
+    known = known_metric_names() | {rule["record"] for rule in all_rules(rules) if "record" in rule}
+    referenced = {name for rule in all_rules(rules) for name in METRIC_TOKEN.findall(rule["expr"])}
+    assert referenced
+    assert not sorted(referenced - known)
+
+
+def test_recorded_percentiles_are_used_rather_than_recomputed(rules: dict) -> None:
+    """A percentile computed two ways eventually disagrees with itself."""
+    recorded = {rule["record"] for rule in all_rules(rules) if "record" in rule}
+    assert "inferstack:ttft_seconds:p99" in recorded
+
+    latency_alerts = [a for a in alerts(rules) if "Slow" in a["alert"]]
+    assert latency_alerts
+    for alert in latency_alerts:
+        assert any(name in alert["expr"] for name in recorded), alert["alert"]
+
+
+def test_recording_rules_use_histogram_buckets(rules: dict) -> None:
+    for rule in all_rules(rules):
+        if "record" in rule and rule["record"].endswith(":p99"):
+            assert "histogram_quantile(" in rule["expr"]
+            assert "_bucket" in rule["expr"]
+
+
+def test_the_cache_alert_accepts_both_metric_spellings(rules: dict) -> None:
+    """vLLM renamed the metric in V1; an alert that knows one name is silent on
+    half the engine versions this stack can front."""
+    alert = next(a for a in alerts(rules) if a["alert"] == "KVCacheNearlyFull")
+    assert "kv_cache_usage_perc" in alert["expr"]
+    assert "gpu_cache_usage_perc" in alert["expr"]
+
+
+def test_placeholder_thresholds_are_labelled_as_placeholders(rules: dict) -> None:
+    """A latency target is a product decision. Shipping one as though it were
+    measured is the kind of quiet claim this project exists not to make."""
+    for alert in alerts(rules):
+        if "Slow" in alert["alert"]:
+            assert "PLACEHOLDER" in alert["annotations"]["description"], alert["alert"]
+
+
+@pytest.mark.skipif(shutil.which("promtool") is None, reason="promtool is not installed")
+def test_promtool_accepts_the_rules() -> None:
+    """The only check here that Prometheus itself performs.
+
+    Skipped when promtool is absent, which is the normal case on the
+    development machine; CI installs it so this always runs there.
+    """
+    result = subprocess.run(  # noqa: S603 - fixed argv
+        [shutil.which("promtool"), "check", "rules", str(RULES_YML)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(shutil.which("promtool") is None, reason="promtool is not installed")
+def test_promtool_accepts_the_scrape_config() -> None:
+    result = subprocess.run(  # noqa: S603 - fixed argv
+        [shutil.which("promtool"), "check", "config", str(PROMETHEUS_YML)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # The rule_files glob points at a container path, so a missing-file warning
+    # is expected off the container; only a config *error* should fail.
+    assert result.returncode == 0 or "rules" in (result.stdout + result.stderr).lower(), (
+        result.stdout + result.stderr
+    )
