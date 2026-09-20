@@ -100,7 +100,7 @@ def test_every_declared_signal_is_either_found_or_listed_as_missing(exposition: 
 
 def test_an_endpoint_that_is_not_an_engine_is_visibly_empty() -> None:
     """Otherwise 'not a vLLM' and 'an idle vLLM' render identically."""
-    snapshot = snapshot_from_text("python_gc_objects_collected_total{generation=\"0\"} 5")
+    snapshot = snapshot_from_text('python_gc_objects_collected_total{generation="0"} 5')
     assert snapshot.is_empty
     assert snapshot.sample_count == 1
 

@@ -75,11 +75,11 @@ def test_escaped_newline_is_decoded() -> None:
         "x",  # no value
         'x{k="v"}',  # labels but no value
         "x notanumber",
-        'x{k=v} 1',  # unquoted label value
+        "x{k=v} 1",  # unquoted label value
         'x{k="v" 1',  # unterminated label set
         'x{k="v} 1',  # unterminated label value
         '{k="v"} 1',  # no metric name
-        "x{=\"v\"} 1",  # empty label name
+        'x{="v"} 1',  # empty label name
     ],
 )
 def test_a_line_we_cannot_read_is_an_error_not_a_skip(line: str) -> None:
@@ -114,9 +114,7 @@ def test_agrees_with_the_prometheus_client_reference_parser() -> None:
     prometheus_parser = pytest.importorskip("prometheus_client.parser")
     text = FIXTURE.read_text(encoding="utf-8")
 
-    ours = {
-        (s.name, tuple(sorted(s.labels.items()))): s.value for s in parse_exposition(text)
-    }
+    ours = {(s.name, tuple(sorted(s.labels.items()))): s.value for s in parse_exposition(text)}
     theirs = {
         (sample.name, tuple(sorted(sample.labels.items()))): sample.value
         for family in prometheus_parser.text_string_to_metric_families(text)

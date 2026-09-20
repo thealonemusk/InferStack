@@ -38,9 +38,7 @@ def test_p99_interpolates_near_the_top_of_its_bucket() -> None:
 
 
 def test_scrape_order_does_not_matter() -> None:
-    assert quantile_from_buckets(list(reversed(SIMPLE)), 0.5) == quantile_from_buckets(
-        SIMPLE, 0.5
-    )
+    assert quantile_from_buckets(list(reversed(SIMPLE)), 0.5) == quantile_from_buckets(SIMPLE, 0.5)
 
 
 def test_a_rank_inside_the_first_bucket_interpolates_from_zero() -> None:
