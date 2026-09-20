@@ -1059,6 +1059,9 @@ def bench(
         json.dumps(report.to_dict(), indent=2), encoding="utf-8"
     )
 
+    # With --json, stdout is the report and nothing else: anything else printed
+    # there makes the output unparseable by the tool that asked for JSON.
+    notes = err_console if as_json else console
     if as_json:
         console.print_json(json.dumps(report.to_dict()))
     else:
@@ -1068,12 +1071,12 @@ def bench(
         try:
             from inferstack.bench.plots import plot_goodput, plot_sweep
 
-            console.print(f"[dim]{plot_goodput(report, destination / 'goodput.png')}[/dim]")
-            console.print(f"[dim]{plot_sweep(report, destination / 'sweep.png')}[/dim]")
+            notes.print(f"[dim]{plot_goodput(report, destination / 'goodput.png')}[/dim]")
+            notes.print(f"[dim]{plot_sweep(report, destination / 'sweep.png')}[/dim]")
         except ImportError as exc:
             err_console.print(f"[yellow]{exc}[/yellow]")
 
-    console.print(f"[dim]report and per-request records in {destination}[/dim]")
+    notes.print(f"[dim]report and per-request records in {destination}[/dim]")
 
     # A sweep the generator could not keep up with is not a measurement of the
     # server, so it must not exit 0 and be mistaken for one.
@@ -1109,6 +1112,8 @@ def analyse(
         err_console.print(f"[bold red]{exc}[/bold red]")
         raise typer.Exit(1) from exc
 
+    # See `bench`: with --json, stdout carries the report and nothing else.
+    notes = err_console if as_json else console
     if as_json:
         console.print_json(json.dumps(report.to_dict()))
     else:
@@ -1122,14 +1127,14 @@ def analyse(
     destination.mkdir(parents=True, exist_ok=True)
     payload = destination / f"sweep-{name}.json"
     payload.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
-    console.print(f"[dim]{payload}[/dim]")
+    notes.print(f"[dim]{payload}[/dim]")
 
     if plot:
         try:
             from inferstack.bench.plots import plot_goodput, plot_sweep
 
-            console.print(f"[dim]{plot_goodput(report, destination / f'goodput-{name}.png')}[/dim]")
-            console.print(f"[dim]{plot_sweep(report, destination / f'sweep-{name}.png')}[/dim]")
+            notes.print(f"[dim]{plot_goodput(report, destination / f'goodput-{name}.png')}[/dim]")
+            notes.print(f"[dim]{plot_sweep(report, destination / f'sweep-{name}.png')}[/dim]")
         except ImportError as exc:
             err_console.print(f"[yellow]{exc}[/yellow]")
 
