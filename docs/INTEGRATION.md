@@ -105,6 +105,8 @@ inferstack smoke --base-url ... --model ... --json > smoke-$(git rev-parse --sho
 
 **Caveat worth stating before you quote any of it.** This is a sanity check, not
 a benchmark: one concurrency point, a burst arrival pattern, a short prompt.
+For a capacity number use `inferstack bench`, which offers open-loop Poisson
+arrivals at a ladder of rates and reports goodput against an SLO you state.
 Controlled arrival rates and real percentile curves are Phase 4. Run it from a
 machine close to the endpoint, or you are partly measuring your own network.
 

@@ -298,3 +298,154 @@ def test_metrics_sampling_writes_one_json_object_per_line(
     # counter divided by uptime averages in every idle second since start.
     assert "Output throughput" in result.stdout
     assert "Over the window" in result.stdout
+
+
+# --- bench and analyse ----------------------------------------------------
+
+
+def _sweep_records(directory: Path, rates: tuple[float, ...] = (2.0, 8.0)) -> Path:
+    """A records directory as a sweep would leave one behind."""
+    directory.mkdir(parents=True, exist_ok=True)
+    for rate in rates:
+        count = int(rate * 10)
+        lines = []
+        for i in range(count):
+            scheduled = 10.0 * (i + 1) / count
+            # The fast rate meets a 1s TTFT target; the slow one does not.
+            ttft = 0.1 if rate < 4 else 3.0
+            lines.append(
+                json.dumps(
+                    {
+                        "index": i,
+                        "scheduled_at_s": scheduled,
+                        "sent_at_s": scheduled,
+                        "finished_at_s": scheduled + 0.5,
+                        "schedule_lag_s": 0.0,
+                        "ttft_s": ttft,
+                        "ttft_from_schedule_s": ttft,
+                        "tpot_s": 0.02,
+                        "e2e_s": 0.5,
+                        "e2e_from_schedule_s": 0.5,
+                        "output_tokens": 128,
+                        "prompt_tokens": 128,
+                        "ok": True,
+                        "error": None,
+                        "status_code": 200,
+                    }
+                )
+            )
+        (directory / f"rate-{rate:g}.jsonl").write_text("\n".join(lines), encoding="utf-8")
+    return directory
+
+
+def test_bench_rejects_a_rate_list_that_is_not_numbers() -> None:
+    result = runner.invoke(app, ["bench", "--rates", "fast,slow"])
+    assert result.exit_code == 2
+
+
+def test_bench_passes_the_endpoint_and_slo_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    async def fake_run_sweep(base_url, model, config, api_key=None, on_step=None):
+        from inferstack.bench.report import SweepReport
+
+        captured["base_url"] = base_url
+        captured["model"] = model
+        captured["config"] = config
+        return SweepReport(steps=[], slo=config.slo), []
+
+    monkeypatch.setattr("inferstack.cli.run_sweep", fake_run_sweep)
+    result = runner.invoke(
+        app,
+        [
+            "bench",
+            "--base-url",
+            "https://their-host/v1",
+            "--model",
+            "their-model",
+            "--rates",
+            "4,2",
+            "--duration",
+            "5",
+            "--ttft-slo",
+            "2.5",
+            "--tpot-slo",
+            "0.2",
+            "--no-metrics",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert captured["base_url"] == "https://their-host/v1"
+    assert captured["model"] == "their-model"
+    # Ascending, whatever order they were given: a preempted engine does not
+    # recover instantly, so a high step before a low one measures the recovery.
+    assert captured["config"].rates == [2.0, 4.0]
+    assert captured["config"].slo.ttft_s == 2.5
+    assert captured["config"].metrics_url is None
+
+
+def test_bench_exits_nonzero_when_the_generator_fell_behind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A sweep the generator could not keep up with is not a measurement of the
+    server, so it must not exit 0 and be mistaken for one."""
+    from inferstack.bench.arrivals import ArrivalSchedule
+    from inferstack.bench.load import LoadResult, RequestRecord, Workload
+    from inferstack.bench.report import ServiceLevel, SweepReport, summarise_step
+
+    lagging = [
+        RequestRecord(
+            index=i, scheduled_at_s=i, sent_at_s=i + 4.0, finished_at_s=i + 5.0, ttft_s=0.1
+        )
+        for i in range(10)
+    ]
+    result = LoadResult(
+        ArrivalSchedule(tuple(float(i) for i in range(10)), 1.0),
+        Workload(),
+        lagging,
+        wall_clock_s=10.0,
+        started_at=0.0,
+    )
+
+    async def fake_run_sweep(base_url, model, config, api_key=None, on_step=None):
+        return SweepReport(steps=[summarise_step(result, ServiceLevel())], slo=ServiceLevel()), []
+
+    monkeypatch.setattr("inferstack.cli.run_sweep", fake_run_sweep)
+    outcome = runner.invoke(app, ["bench", "--no-metrics", "--out", str(tmp_path / "s")])
+
+    assert outcome.exit_code == 1
+    assert "load generator" in outcome.stderr
+
+
+def test_analyse_re_judges_a_finished_run(tmp_path: Path) -> None:
+    """The same measurement, two service levels, two correct answers."""
+    records = _sweep_records(tmp_path / "records")
+
+    strict = runner.invoke(
+        app, ["analyse", str(records), "--ttft-slo", "1", "--name", "interactive", "--json"]
+    )
+    lenient = runner.invoke(
+        app, ["analyse", str(records), "--ttft-slo", "10", "--name", "batch", "--json"]
+    )
+
+    assert strict.exit_code == 0, strict.stdout
+    assert lenient.exit_code == 0, lenient.stdout
+
+    strict_limit = json.loads(strict.stdout)["max_sustainable_rate_per_s"]
+    lenient_limit = json.loads(lenient.stdout)["max_sustainable_rate_per_s"]
+    assert lenient_limit > strict_limit
+
+
+def test_analyse_writes_a_report_named_for_the_service_level(tmp_path: Path) -> None:
+    records = _sweep_records(tmp_path / "records")
+    result = runner.invoke(app, ["analyse", str(records), "--name", "batch", "--ttft-slo", "9"])
+
+    assert result.exit_code == 0, result.stdout
+    assert (tmp_path / "sweep-batch.json").is_file()
+
+
+def test_analyse_says_so_when_there_is_nothing_to_analyse(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["analyse", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "rate-" in result.stderr

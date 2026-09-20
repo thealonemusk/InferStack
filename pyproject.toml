@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A self-hosted LLM inference stack: serving, gateway, observability and performance engineering."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 
 # Core dependencies are deliberately small and pure-Python so that `inferstack`
 # installs on Windows, in a slim container, and inside a Colab/Kaggle cell.
@@ -28,12 +28,12 @@ gateway = [
     "sse-starlette>=2.1",
     "prometheus-client>=0.20",
 ]
-# Phase 4 - load generation and results analysis
+# Phase 4 - load generation and results analysis. No tokenizer here on
+# purpose: prompt and completion token counts are read from the server's own
+# usage block, which is the only source that cannot disagree with the engine
+# being measured.
 bench = [
-    "numpy>=1.26",
-    "pandas>=2.2",
     "matplotlib>=3.8",
-    "transformers>=4.44",
 ]
 # Phase 1 - the engine itself. vLLM publishes Linux wheels only, so the marker
 # keeps `uv lock` and `pip install -e ".[dev]"` working on the Windows dev box.
@@ -111,6 +111,19 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
+
+# Third-party stubs are not ours to type-check. numpy's in particular use
+# `type` statements, which are 3.12 syntax, so following them fails the whole
+# run against this project's 3.11 floor - an error about a dependency's stubs
+# rather than about this code.
+[[tool.mypy.overrides]]
+# Both forms: `numpy.*` matches submodules but not `numpy` itself, which is
+# the file that actually fails to parse.
+module = ["numpy", "numpy.*", "matplotlib", "matplotlib.*", "pandas", "pandas.*"]
+follow_imports = "skip"
+# follow_imports alone is not enough: by default it does not apply to .pyi
+# files, and a stub is exactly what fails here.
+follow_imports_for_stubs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

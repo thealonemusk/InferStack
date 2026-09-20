@@ -122,4 +122,6 @@ record, not something to edit away once they stop applying.*
   synthetic upstream. Phase 4 is where arrival rates and percentile curves
   arrive.
 
-  → **Still true**, and still Phase 4.
+  → **Closed** the same day by `../phase04/sweep.md`: open-loop Poisson
+  arrivals across eight rates on a T4, sustaining 16.5 req/s within an
+  interactive SLO.

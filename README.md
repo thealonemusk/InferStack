@@ -1,18 +1,97 @@
 # InferStack
 
-A self-hosted LLM inference stack: serve an open model with continuous batching,
-put a real API in front of it, instrument it, and then optimise it with numbers
-rather than folklore.
+A self-hosted LLM inference stack, built to answer one question honestly: **how
+much can this GPU actually serve, and how would you know?**
+
+Serve an open model with continuous batching, put a real API in front of it,
+instrument it, then load it until it breaks and write down where.
 
 > You cannot optimize what you have never served.
 
 ---
 
-## 8 concurrent requests, served in the time of 1
+## 16.5 requests per second — and the point where more load makes things worse
 
-Measured on a **free-tier Tesla T4**. vLLM 0.29.0, Qwen2.5-1.5B-Instruct,
-float16, `colab-t4` profile. Not a simulation, not an estimate —
-[raw artifacts here](artifacts/curated/phase01/).
+![Goodput against offered load](artifacts/curated/phase04/goodput.png)
+
+One **free-tier Tesla T4**. Qwen2.5-1.5B-Instruct, vLLM 0.29.0, 128-token
+prompts, 128-token responses. Open-loop Poisson arrivals at eight rates.
+[Every request that produced this is in the repo](artifacts/curated/phase04/records/).
+
+| | Measured |
+|---|---|
+| **Sustained arrival rate** | **16.5 req/s** within TTFT < 1 s, TPOT < 50 ms |
+| **Peak goodput** | **13.5 req/s** |
+| Peak output throughput | 1,865 tok/s — *at a rate that misses the SLO* |
+| TTFT p50 / p99 at the limit | 120 ms / 593 ms |
+
+**Read the last two points on that chart together.** Pushing from 16.5 to
+24 req/s made output throughput go **up** — 1,732 → 1,865 tok/s — while goodput
+fell **69%**, from 13.5 to 4.3 req/s, and median time-to-first-token went from
+120 ms to **5.1 seconds**.
+
+A throughput-only benchmark reports 1,865 tok/s as this configuration's best
+result. It is its worst. The GPU is busier than it has ever been and 82% of
+arriving requests are already too late to be worth anything by the time they get
+a first token. The shaded region is that work: completed, paid for in GPU time,
+delivered after the deadline.
+
+That gap is why this project reports **goodput** — throughput counting only
+requests that met a stated service level — and why the service level is printed
+next to every capacity number it produces.
+
+### The finding that contradicted my own docs
+
+![The full sweep](artifacts/curated/phase04/sweep.png)
+
+Phase 3 of this project called `vllm:num_requests_waiting` *"the leading
+indicator of latency pain"*. In this run it **never moved** — queue depth was
+zero at every rate, including the one with five-second TTFT. KV-cache
+utilisation peaked at **2.9%** of a cache the engine had sized for 322,944
+tokens.
+
+What moved was the running batch: **4 → 9 → 17 → 27 → 36 → 65 → 99 → 100**.
+
+With `max_num_seqs=256` the scheduler admits almost everything straight into the
+running batch instead of queueing it. Past ~65 concurrent sequences the T4
+cannot drive the batch fast enough, so every request in it degrades together —
+no queue, no cache pressure, no preemption. The binding constraint is **compute**,
+and the "78.84× concurrency headroom" this project measured in Phase 1 is real
+arithmetic about memory that is unreachable in practice at this shape. Sizing a
+deployment from it would over-provision by roughly fourfold.
+
+→ [The full result, with what it does not show](artifacts/curated/phase04/sweep.md)
+
+## Why you can believe the number
+
+Three things separate this from a load test that agrees with whatever you hoped.
+
+**The load does not adapt to the server.** Arrival times are drawn from a
+Poisson process and fixed *before the run starts*. Almost every naive benchmark
+is closed-loop — N workers each waiting for a response before sending again — so
+when the server slows down the generator quietly sends less, and the measurement
+hides the problem it was built to find.
+
+**Latency is measured from when a request was *due*, not when it was sent.** A
+generator that is itself saturated ships a request late, and the user waited
+that time whether or not anything recorded it. Every record carries both clocks
+and the gap is reported per step; if it ever exceeds 250 ms the whole sweep is
+marked **invalid** and the CLI exits non-zero. That is not decoration —
+[here is the run where it fired](artifacts/curated/phase04/generator-ceiling.md),
+and the manufactured "saturation knee" it prevented from being published.
+
+**The workload is pinned, and one that was not is kept as evidence.** The first
+sweep on real hardware passed every validity check the harness has and was
+worthless: the prompt asked the model to summarise in one word, it obliged with
+three tokens per response, decode never ran, and the curve came out perfectly
+flat. [It is still in the repo](artifacts/curated/phase04/the-first-sweep-measured-nothing.md),
+because the lesson is that the checks guard the *measurement* and nothing guards
+the *workload*.
+
+## Before the curve: continuous batching, proven
+
+The capacity number above only means something if the engine batches at all.
+Measured on the same T4 — [artifacts](artifacts/curated/phase01/):
 
 ```
  1 request  alone         ████████████████████                     0.95 s
@@ -25,33 +104,18 @@ float16, `colab-t4` profile. Not a simulation, not an estimate —
 
 | | Measured |
 |---|---|
-| **Time to first token** | **26 ms** |
-| **Time per output token** | **14.6 ms** |
-| **Output throughput** | **493 tok/s** |
-| TTFT p50 / p95 under load | 59 ms / 61 ms |
-| Requests succeeded | 8 / 8 |
+| Time to first token | **26 ms** |
+| Time per output token | **14.6 ms** |
+| Output throughput | 493 tok/s |
 | Engine cold start to healthy | 137.5 s |
-
-Eight requests arriving at once finished in **1.04 s** — barely longer than the
-**0.95 s** one request took by itself. That is continuous batching: the
-scheduler merged all eight into a single running batch instead of queueing them.
-
-And the batch was nowhere near full. The engine reported its own ceiling:
-
-```
-GPU KV cache size: 322,944 tokens
-Maximum concurrency for 4,096 tokens per request: 78.84x
-Using TRITON_ATTN attention backend   (SM 7.5 — no FlashAttention-2)
-```
-
-**78.84× concurrent capacity, and this test used 8.** That headroom is what
-Phase 5 exists to map.
 
 > The KV cache arithmetic was predicted before the run:
 > `2 × 28 layers × 2 KV heads × 128 head_dim × 2 bytes` = **28,672 bytes/token**.
 > The engine measured **28,687**. Theory and hardware agree to 0.05%.
 
----
+And the gateway in front of it costs **7 ms** of TTFT — 33 ms through it against
+26 ms direct, with the 7.3× batching speedup intact at 7.38×
+([Phase 3](artifacts/curated/phase03/gateway-in-front-of-vllm.md)).
 
 ## Use it on an endpoint you already have
 
@@ -60,7 +124,7 @@ measures anything that does — vLLM, SGLang, TGI, llama.cpp, LM Studio, Ollama,
 or a hosted API:
 
 ```bash
-pip install git+https://github.com/thealonemusk/InferStack@phase-03-observability
+pip install git+https://github.com/thealonemusk/InferStack@phase-04-bench
 
 inferstack smoke --base-url http://your-host:8000/v1 --model your-model -c 8
 ```
@@ -115,6 +179,29 @@ boundaries.
 `--duration 60 --interval 0.2 --out run.jsonl` samples instead of reading once,
 which is how a run's signals survive a GPU session nothing can scrape into.
 
+### Get your own capacity number
+
+The same sweep that produced the chart at the top runs against any
+OpenAI-compatible server:
+
+```bash
+inferstack bench --base-url http://your-host:8000/v1 --model your-model   --rates 2,4,8,12,16,24 --duration 30   --ttft-slo 1.0 --tpot-slo 0.05 --plot
+```
+
+You get the curve, the arrival rate your SLO actually survives, and a per-request
+JSONL of everything it measured. If the load generator cannot keep up it says so
+and exits non-zero rather than handing you its own limits dressed as yours.
+
+Your SLO is not mine, and the capacity number moves when it changes — so re-judge
+a finished run without touching the GPU again:
+
+```bash
+inferstack analyse <records-dir> --ttft-slo 5 --tpot-slo 0.2 --name batch
+```
+
+Same measurement, different service level, different and equally correct answer.
+That is the whole reason the per-request records are written down.
+
 Already serving your own model? Swapping a hosted API for this one is a one-line
 change, because the endpoint is OpenAI-compatible:
 
@@ -128,9 +215,10 @@ workload-specific tuning, and a blunt list of what isn't built yet.
 ## What this is
 
 Most "LLM serving" tutorials stop at a working endpoint. The interesting part
-starts afterwards: what happens to p99 when concurrency goes from 8 to 128, what
-`max_num_batched_tokens` actually trades away, and why a throughput number
-without a queue-depth graph beside it means nothing.
+starts afterwards: what happens to p99 when the arrival rate doubles, what
+`max_num_seqs` actually trades away, and why a throughput number with no service
+level beside it is a measure of how busy a GPU was rather than of how much it
+accomplished.
 
 InferStack is built phase by phase, each leaving behind a decision record and a
 reproducible measurement.
@@ -147,8 +235,8 @@ goodput), the architecture, and every decision with its reasoning.
 | 1 | vLLM serving + continuous batching proven on real hardware | ✅ **done** |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ **done** |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | ✅ **done**, verified against a real vLLM |
-| 4 | Benchmark harness: Poisson arrivals, concurrency sweeps, p50/p95/p99 | next |
-| 5 | Continuous batching tuning, latency/throughput Pareto curves | |
+| 4 | Benchmark harness: Poisson arrivals, open-loop sweeps, goodput | ✅ **done**, on a T4 |
+| 5 | Continuous batching tuning, latency/throughput Pareto curves | next — and [the curve says where to start](artifacts/curated/phase04/sweep.md) |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, tensor parallelism | |
 | 7 | Rate limiting, admission control, graceful drain, multi-replica routing | |
 | 8 | SGLang on the identical harness, head to head | |
@@ -157,6 +245,26 @@ goodput), the architecture, and every decision with its reasoning.
 ## Engineering notes worth stealing
 
 Things this project does that most don't:
+
+**It publishes the run that measured nothing.** The first sweep on real hardware
+passed every check the harness has — Poisson arrivals, a generator late by
+16 ms, honest percentiles, the engine drained between steps — and produced a
+flat line, because the prompt asked the model for a one-word summary and got
+one. Three tokens per response. The tell was 96 output tokens/s at 32 req/s, and
+it took dividing one column by another to see it.
+[It is still in the repo.](artifacts/curated/phase04/the-first-sweep-measured-nothing.md)
+Validity checks guard the measurement; nothing guards the workload.
+
+**Its benchmark knows its own ceiling.** A load generator has a capacity too,
+and one that does not measure it reports it as the server's. This one is late by
+tens of milliseconds up to ~40 req/s and by more than a second past it — and at
+that point it refuses to publish, prints why, and exits non-zero.
+[Measured, with the fake knee it prevented.](artifacts/curated/phase04/generator-ceiling.md)
+
+**It contradicts its own documentation when the data says to.** Phase 3 called
+queue depth "the leading indicator of latency pain". Phase 4 measured it at zero
+through a collapse from 13.5 to 4.3 req/s of goodput, and the docs now say so
+and explain why.
 
 **It refuses to run configurations that cannot work.** `inferstack doctor`
 probes the machine, derives capabilities from CUDA compute capability, and exits
@@ -295,7 +403,7 @@ src/inferstack/
   remote/             drive Kaggle GPU sessions from code
   gateway/            HTTP API in front         (Phase 2)
   observability/      metrics: read, summarise, expose (Phase 3)
-  bench/              load generation, analysis (Phase 4)
+  bench/              open-loop load, goodput, charts  (Phase 4)
 deploy/compose/       Prometheus + Grafana, dashboard included
 scripts/              one-off measurement scripts behind the artifacts
 artifacts/curated/    measured results, committed
@@ -308,7 +416,7 @@ docs/phases/          what each phase built and how to verify it
 ## Development
 
 ```bash
-pytest              # 302 tests
+pytest              # 364 tests
 ruff check .        # lint, including bandit security rules
 pre-commit install  # run both on every commit
 ```
@@ -322,6 +430,8 @@ pre-commit install  # run both on every commit
 - [Phase 1 — Baseline serving](docs/phases/phase-01-baseline-serving.md) — including the three runs it took, and why each failure was real
 - [Phase 2 — The gateway](docs/phases/phase-02-gateway.md) — auth, streaming pass-through, admission control
 - [Phase 3 — Observability](docs/phases/phase-03-observability.md) — the four signals, histograms not averages, and what the instrumentation costs
+- [Phase 4 — The benchmark harness](docs/phases/phase-04-bench.md) — open-loop load, goodput, and the curve
+- **[docs/REVIEW.md](docs/REVIEW.md)** — reading order for the stacked branches, if you are reviewing this
 - [Architecture decision records](docs/adr/)
 
 ## Licence

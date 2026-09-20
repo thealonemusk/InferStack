@@ -258,7 +258,7 @@ docker compose -f deploy/compose/docker-compose.yml up -d
 ```
 
 ```bash
-pytest                                    # 302 tests
+pytest                                    # 364 tests
 ruff check . && ruff format --check src tests scripts
 mypy
 
@@ -295,9 +295,12 @@ decision, and the difference matters:
 
 **Later phases, by design:**
 
-- **One concurrency point, closed-loop.** No arrival rates, no percentile
-  curves, no goodput. That is Phase 4, and this phase deliberately does not
-  anticipate it — `smoke` is labelled a sanity check for exactly this reason.
+- ~~One concurrency point, closed-loop.~~ **Done in Phase 4:** an open-loop
+  sweep on a T4 put the sustainable rate at 16.5 req/s and found goodput
+  collapsing 69% past it. That run also contradicted this phase's claim that
+  queue depth is the leading indicator of latency pain — it stayed at zero
+  through the whole collapse, because `max_num_seqs=256` lets the scheduler
+  admit rather than queue. See [Phase 4](phase-04-bench.md).
 - **Tensor parallelism untested.** Two T4s were attached to the run; `colab-t4`
   uses one. Phase 6.
 - **No per-key rate limiting, no multi-replica routing.** Admission control is

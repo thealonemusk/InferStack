@@ -1,0 +1,527 @@
+{
+  "phase": 4,
+  "branch": "phase-04-bench",
+  "profile": "colab-t4",
+  "steps": {
+    "install": {
+      "ok": true,
+      "seconds": 260.8,
+      "vllm_version": "0.29.0"
+    },
+    "doctor": {
+      "environment": {
+        "platform": "Linux",
+        "platform_release": "6.12.90+",
+        "python_version": "3.12.13",
+        "in_wsl": false,
+        "in_container": true,
+        "cpu": {
+          "model": "Intel(R) Xeon(R) CPU @ 2.00GHz",
+          "cores": 2,
+          "threads": 4,
+          "flags": [
+            "avx",
+            "avx2",
+            "avx512bw",
+            "avx512f",
+            "f16c"
+          ]
+        },
+        "memory": {
+          "ram_total_gb": 31.35,
+          "ram_available_gb": 30.26,
+          "disk_free_gb": 19.5
+        },
+        "gpus": [
+          {
+            "index": 0,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          },
+          {
+            "index": 1,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          }
+        ],
+        "docker_available": false,
+        "capabilities": {
+          "cuda": true,
+          "tensor_parallel": true,
+          "bfloat16": false,
+          "flash_attention_2": false,
+          "int4_marlin": false,
+          "fp8_quantization": false
+        },
+        "warnings": [
+          "Tesla T4 is compute capability 7.5: no bfloat16 support. Set engine.dtype=float16 explicitly - leaving it on 'auto' will make vLLM refuse to load a bf16 checkpoint."
+        ],
+        "notes": [
+          "Compute capability 7.5 is below 8.0, so vLLM's FlashAttention-2 backend is unavailable. Measured on vLLM 0.29 / T4: it selects TRITON_ATTN (candidates were TRITON_ATTN and FLEX_ATTENTION). Record which attention backend was active alongside every benchmark result - results are not comparable across backends.",
+          "No native FP8 tensor cores. Phase 6 quantisation should target AWQ or GPTQ int4 rather than FP8.",
+          "Marlin int4 kernels need compute capability 8.0+. AWQ/GPTQ still run here, on the slower generic kernels - factor that into any quantisation speedup claim.",
+          "2 GPUs visible: tensor_parallel_size up to 2 is testable in Phase 6.",
+          "15 GB of VRAM. A ~1.5B model in float16 leaves plenty of room for KV cache, which is what actually stresses continuous batching. Prefer a small model with a large batch over a large model."
+        ],
+        "recommended_profile": "kaggle-2xt4"
+      },
+      "issues": [
+        {
+          "severity": "info",
+          "field": "engine.backend",
+          "message": "FlashAttention-2 is unavailable on this GPU generation."
+        }
+      ]
+    },
+    "stripped_flags": [
+      "--device"
+    ],
+    "engine_command": [
+      "vllm",
+      "serve",
+      "Qwen/Qwen2.5-1.5B-Instruct",
+      "--served-model-name",
+      "qwen2.5-1.5b",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8000",
+      "--dtype",
+      "float16",
+      "--max-model-len",
+      "4096",
+      "--max-num-seqs",
+      "256",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--enable-chunked-prefill"
+    ],
+    "engine": {
+      "ok": true,
+      "startup_seconds": 139.4
+    },
+    "sweep": {
+      "label": "",
+      "slo": {
+        "name": "interactive",
+        "ttft_s": 1.0,
+        "tpot_s": 0.05
+      },
+      "meta": {
+        "model": "qwen2.5-1.5b",
+        "base_url": "http://127.0.0.1:8000/v1",
+        "config": {
+          "rates": [
+            1.0,
+            2.0,
+            4.0,
+            6.0,
+            8.0,
+            12.0,
+            16.0,
+            24.0
+          ],
+          "duration_s": 30.0,
+          "workload": {
+            "approx_prompt_tokens": 128,
+            "max_tokens": 128,
+            "temperature": 0.0,
+            "ignore_eos": true
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          },
+          "seed": 1337,
+          "warmup_requests": 4,
+          "metrics_url": "http://127.0.0.1:8000"
+        }
+      },
+      "max_sustainable_rate_per_s": 16.4689,
+      "peak_goodput_per_s": 13.5351,
+      "peak_goodput_at_rate_per_s": 16.4689,
+      "peak_output_tokens_per_s": 1864.79,
+      "peak_throughput_at_rate_per_s": 24.0801,
+      "generator_kept_up": true,
+      "steps": [
+        {
+          "offered_rate_per_s": 0.8565,
+          "requested_rate_per_s": 1.0,
+          "wall_clock_s": 31.1558,
+          "sent": 25,
+          "completed": 25,
+          "failed": 0,
+          "met_slo": 25,
+          "completed_rate_per_s": 0.788,
+          "goodput_per_s": 0.788,
+          "output_tokens_per_s": 100.86,
+          "drain_overshoot": 1.067,
+          "ttft_p50_s": 0.04964295433468946,
+          "ttft_p90_s": 0.05449127216309524,
+          "ttft_p95_s": 0.05524784794459059,
+          "ttft_p99_s": 0.05777630267733258,
+          "tpot_p50_s": 0.01538517156800026,
+          "tpot_p99_s": 0.015849372927999865,
+          "e2e_p50_s": 1.9756064117326702,
+          "e2e_p99_s": 2.0278705065270373,
+          "max_schedule_lag_s": 0.001968,
+          "ttft_p99_send_clock_s": 0.057571827000060694,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 61,
+            "peak": {
+              "running": 4.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.0014863994450775575
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 3174.0,
+            "prompt_tokens_delta": 3875.0,
+            "engine_ttft_p99_cumulative_s": 0.981875,
+            "engine_itl_p99_cumulative_s": 0.024854675692695213,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 1.8964,
+          "requested_rate_per_s": 2.0,
+          "wall_clock_s": 31.5956,
+          "sent": 56,
+          "completed": 56,
+          "failed": 0,
+          "met_slo": 56,
+          "completed_rate_per_s": 1.7271,
+          "goodput_per_s": 1.7271,
+          "output_tokens_per_s": 221.07,
+          "drain_overshoot": 1.07,
+          "ttft_p50_s": 0.05055652878431971,
+          "ttft_p90_s": 0.05884627629564321,
+          "ttft_p95_s": 0.060837307477182634,
+          "ttft_p99_s": 0.06619358758563898,
+          "tpot_p50_s": 0.01633949878400017,
+          "tpot_p99_s": 0.01750515381600053,
+          "e2e_p50_s": 2.087668179220601,
+          "e2e_p99_s": 2.2418765247780073,
+          "max_schedule_lag_s": 0.005649,
+          "ttft_p99_send_clock_s": 0.06170105900002909,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 62,
+            "peak": {
+              "running": 9.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.0027250656493088554
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 7149.0,
+            "prompt_tokens_delta": 8680.0,
+            "engine_ttft_p99_cumulative_s": 0.9468750000000004,
+            "engine_itl_p99_cumulative_s": 0.024851442447790188,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 3.9897,
+          "requested_rate_per_s": 4.0,
+          "wall_clock_s": 32.1817,
+          "sent": 119,
+          "completed": 119,
+          "failed": 0,
+          "met_slo": 119,
+          "completed_rate_per_s": 3.4868,
+          "goodput_per_s": 3.4868,
+          "output_tokens_per_s": 446.31,
+          "drain_overshoot": 1.079,
+          "ttft_p50_s": 0.05686248981309383,
+          "ttft_p90_s": 0.06650656575957825,
+          "ttft_p95_s": 0.06945026539304067,
+          "ttft_p99_s": 0.07014563716115774,
+          "tpot_p50_s": 0.018660149112,
+          "tpot_p99_s": 0.02016646395999942,
+          "e2e_p50_s": 2.3871947551478474,
+          "e2e_p99_s": 2.5816968018564985,
+          "max_schedule_lag_s": 0.002364,
+          "ttft_p99_send_clock_s": 0.06930454999996982,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 63,
+            "peak": {
+              "running": 17.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.005004211465094333
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 15169.0,
+            "prompt_tokens_delta": 18445.0,
+            "engine_ttft_p99_cumulative_s": 0.8725000000000005,
+            "engine_itl_p99_cumulative_s": 0.03036764705882342,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 5.9437,
+          "requested_rate_per_s": 6.0,
+          "wall_clock_s": 32.3287,
+          "sent": 178,
+          "completed": 178,
+          "failed": 0,
+          "met_slo": 178,
+          "completed_rate_per_s": 5.4762,
+          "goodput_per_s": 5.4762,
+          "output_tokens_per_s": 700.96,
+          "drain_overshoot": 1.08,
+          "ttft_p50_s": 0.07123787512258417,
+          "ttft_p90_s": 0.08452722053466744,
+          "ttft_p95_s": 0.08717112759062928,
+          "ttft_p99_s": 0.09129505216870726,
+          "tpot_p50_s": 0.025159661671999855,
+          "tpot_p99_s": 0.02704750548799984,
+          "e2e_p50_s": 3.2147495617806063,
+          "e2e_p99_s": 3.4634171595972276,
+          "max_schedule_lag_s": 0.006811,
+          "ttft_p99_send_clock_s": 0.08958136000001105,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 63,
+            "peak": {
+              "running": 27.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.007233810632710669
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 22723.0,
+            "prompt_tokens_delta": 27590.0,
+            "engine_ttft_p99_cumulative_s": 0.7612500000000004,
+            "engine_itl_p99_cumulative_s": 0.04891493259748484,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 8.246,
+          "requested_rate_per_s": 8.0,
+          "wall_clock_s": 32.8794,
+          "sent": 246,
+          "completed": 246,
+          "failed": 0,
+          "met_slo": 246,
+          "completed_rate_per_s": 7.0392,
+          "goodput_per_s": 7.0392,
+          "output_tokens_per_s": 901.02,
+          "drain_overshoot": 1.102,
+          "ttft_p50_s": 0.07779148110508771,
+          "ttft_p90_s": 0.09201703448533749,
+          "ttft_p95_s": 0.09380744939838515,
+          "ttft_p99_s": 0.09660427592847398,
+          "tpot_p50_s": 0.027201382104000003,
+          "tpot_p99_s": 0.028807780135999564,
+          "e2e_p50_s": 3.4753080350896672,
+          "e2e_p99_s": 3.6895687035437277,
+          "max_schedule_lag_s": 0.006284,
+          "ttft_p99_send_clock_s": 0.09572750000006636,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 64,
+            "peak": {
+              "running": 36.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.009810236337511768
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 31322.0,
+            "prompt_tokens_delta": 38130.0,
+            "engine_ttft_p99_cumulative_s": 0.09905000000000001,
+            "engine_itl_p99_cumulative_s": 0.04946173420787633,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 12.4697,
+          "requested_rate_per_s": 12.0,
+          "wall_clock_s": 33.5492,
+          "sent": 374,
+          "completed": 374,
+          "failed": 0,
+          "met_slo": 374,
+          "completed_rate_per_s": 10.4025,
+          "goodput_per_s": 10.4025,
+          "output_tokens_per_s": 1331.52,
+          "drain_overshoot": 1.119,
+          "ttft_p50_s": 0.09470648872851584,
+          "ttft_p90_s": 0.11253700181632098,
+          "ttft_p95_s": 0.11885909286180052,
+          "ttft_p99_s": 0.12493921843706346,
+          "tpot_p50_s": 0.03411193382399961,
+          "tpot_p99_s": 0.03597449994399995,
+          "e2e_p50_s": 4.3681901114967605,
+          "e2e_p99_s": 4.603851919683709,
+          "max_schedule_lag_s": 0.009037,
+          "ttft_p99_send_clock_s": 0.12426933100005044,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 66,
+            "peak": {
+              "running": 65.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.017440420155576453
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 47869.0,
+            "prompt_tokens_delta": 57970.0,
+            "engine_ttft_p99_cumulative_s": 0.22684615384615392,
+            "engine_itl_p99_cumulative_s": 0.04961726505325701,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 16.4689,
+          "requested_rate_per_s": 16.0,
+          "wall_clock_s": 33.8477,
+          "sent": 494,
+          "completed": 494,
+          "failed": 0,
+          "met_slo": 494,
+          "completed_rate_per_s": 13.5351,
+          "goodput_per_s": 13.5351,
+          "output_tokens_per_s": 1732.5,
+          "drain_overshoot": 1.128,
+          "ttft_p50_s": 0.12014532517576981,
+          "ttft_p90_s": 0.23616060241027625,
+          "ttft_p95_s": 0.44694016303395045,
+          "ttft_p99_s": 0.5933416033958352,
+          "tpot_p50_s": 0.042438378783999725,
+          "tpot_p99_s": 0.044554259399999865,
+          "e2e_p50_s": 5.445831100668812,
+          "e2e_p99_s": 6.082162287103547,
+          "max_schedule_lag_s": 0.018942,
+          "ttft_p99_send_clock_s": 0.5923388049999403,
+          "slo_attainment": 1.0,
+          "keeping_up": true,
+          "healthy": true,
+          "engine": {
+            "samples": 66,
+            "peak": {
+              "running": 99.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.02720110984491897
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 63140.0,
+            "prompt_tokens_delta": 76570.0,
+            "engine_ttft_p99_cumulative_s": 0.24524855491329478,
+            "engine_itl_p99_cumulative_s": 0.049705152380688275,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        },
+        {
+          "offered_rate_per_s": 24.0801,
+          "requested_rate_per_s": 24.0,
+          "wall_clock_s": 43.9472,
+          "sent": 719,
+          "completed": 719,
+          "failed": 0,
+          "met_slo": 127,
+          "completed_rate_per_s": 14.5686,
+          "goodput_per_s": 4.2534,
+          "output_tokens_per_s": 1864.79,
+          "drain_overshoot": 1.472,
+          "ttft_p50_s": 5.078067589312527,
+          "ttft_p90_s": 8.828964786263235,
+          "ttft_p95_s": 9.35863054318747,
+          "ttft_p99_s": 9.801482899695849,
+          "tpot_p50_s": 0.04444641299199975,
+          "tpot_p99_s": 0.04476906066399988,
+          "e2e_p50_s": 10.661123154312522,
+          "e2e_p99_s": 14.49628931320406,
+          "max_schedule_lag_s": 0.039536,
+          "ttft_p99_send_clock_s": 9.795937797000079,
+          "slo_attainment": 0.1766,
+          "keeping_up": true,
+          "healthy": false,
+          "engine": {
+            "samples": 85,
+            "peak": {
+              "running": 100.0,
+              "waiting": 0.0,
+              "kv_cache_usage": 0.029133429123519794
+            },
+            "preemptions_delta": 0.0,
+            "generation_tokens_delta": 92030.0,
+            "prompt_tokens_delta": 111445.0,
+            "engine_ttft_p99_cumulative_s": 0.24696826280623607,
+            "engine_itl_p99_cumulative_s": 0.04999749967709993,
+            "settled_in_s": 0.01
+          },
+          "slo": {
+            "name": "interactive",
+            "ttft_s": 1.0,
+            "tpot_s": 0.05
+          }
+        }
+      ]
+    },
+    "engine_highlights": [
+      "(EngineCore pid=286) INFO 09-20 12:23:49 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+      "(EngineCore pid=286) INFO 09-20 12:24:27 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/ae111ce08b/rank_0_0/backbone for vLLM's torch.compile",
+      "(EngineCore pid=286) INFO 09-20 12:24:40 [monitor.py:53] torch.compile took 17.82 s in total",
+      "(EngineCore pid=286) INFO 09-20 12:24:52 [gpu_worker.py:625] Available KV cache memory: 8.62 GiB",
+      "(EngineCore pid=286) INFO 09-20 12:24:52 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+      "(EngineCore pid=286) INFO 09-20 12:24:52 [kv_cache_utils.py:2032] GPU KV cache size: 322,944 tokens, Maximum concurrency for 4,096 tokens per request: 78.84x"
+    ]
+  },
+  "ok": true,
+  "total_seconds": 751.3
+}

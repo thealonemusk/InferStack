@@ -341,7 +341,7 @@ scripts/          the measurement and verification scripts behind the artifacts
 .github/workflows/ CI: lint, types, tests, the measurement, promtool
 docs/adr/         architecture decision records
 docs/phases/      what each phase built and how to verify it
-tests/            302 tests
+tests/            364 tests
 ```
 
 ### The four ideas that hold it together
@@ -379,8 +379,8 @@ methodology, not a workaround — say it that way.
 | 1 | vLLM serving + continuous batching proven on hardware | ✅ done |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ done |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache util | ✅ done, verified on a T4 |
-| 4 | Benchmark harness: Poisson arrivals, sweeps, p50/p95/p99 | ← next |
-| 5 | Continuous batching tuning → latency/throughput Pareto curves | |
+| 4 | Benchmark harness: Poisson arrivals, sweeps, p50/p95/p99 | ✅ done, on a T4 |
+| 5 | Continuous batching tuning → latency/throughput Pareto curves | ← next |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, TP=2 | |
 | 7 | Rate limiting, admission control, drain, multi-replica routing | |
 | 8 | SGLang on the identical harness, head to head | |
@@ -416,7 +416,7 @@ vLLM already exports Prometheus metrics. The ones that matter:
 | Metric | Tells you |
 |---|---|
 | `vllm:num_requests_running` | Current batch size — is the batch actually filling? |
-| `vllm:num_requests_waiting` | Queue depth — the leading indicator of latency pain |
+| `vllm:num_requests_waiting` | Queue depth — the leading indicator of latency pain, **when `max_num_seqs` is smaller than the batch the GPU can drive**. See below |
 | `vllm:gpu_cache_usage_perc` | KV cache pressure; near 100% means preemption is next |
 | `vllm:num_preemptions_total` | Where p99 spikes come from |
 | `vllm:time_to_first_token_seconds` | TTFT histogram |
@@ -428,6 +428,13 @@ shipped asking for `vllm:time_per_output_token_seconds`, which 0.29.0 does not
 emit; §7.10 has what that cost. The last two rows are different questions, not
 synonyms: a tail in ITL that TPOT does not show means the stutter is inside
 requests rather than between them.
+
+**That queue-depth caveat is not hypothetical.** Phase 4 measured queue depth
+at **zero** through a goodput collapse from 13.54 to 4.25 req/s, because
+`max_num_seqs=256` lets vLLM admit almost everything into the running batch
+instead of queueing it. The signal that moved was the running batch, 4 → 100.
+Watch both, and know which regime you are in: queueing means the cap is
+binding, a growing batch with an empty queue means the GPU is.
 
 **Why histograms rather than averages.** Latency distributions are heavy-tailed.
 A mean TTFT of 200 ms is compatible with a p99 of 8 seconds, and the p99 is what
@@ -490,7 +497,41 @@ and your latency numbers show it. That's the honest measurement.
 Phase 4 reports a *curve* — latency versus arrival rate — not a single number,
 plus **goodput** under a stated SLO.
 
+**Coordinated omission survives an open-loop design, too.** This is the part
+most people miss. Suppose your generator is correct — it fires on a schedule and
+never waits — but it is itself saturated, and a request due at t=10.0 goes out
+at t=12.5. That user waited 12.5 seconds; your log says the server answered in
+0.2. Every record therefore carries *two* clocks, and the honest percentile is
+the one measured from when the request was **due**. The gap between the two is
+reported per step, and a sweep where it exceeds 250 ms is marked invalid and
+exits non-zero, because at that point the curve describes the load generator.
+
+That is not hypothetical. On the development laptop the generator falls off a
+cliff somewhere between 41 and 62 req/s and is late by more than a second, which
+produces a textbook saturation knee that has nothing to do with the server. It
+is measured in `artifacts/curated/phase04/generator-ceiling.md`.
+
+**And one trap that no amount of methodology catches.** The first sweep on real
+hardware was flawless by every check the harness has — Poisson arrivals, a
+generator late by 16 ms, honest percentiles, the engine drained between steps —
+and completely worthless, because the prompt asked the model to "summarise in
+one word" and it obliged. Three tokens per response, `max_tokens=128` never
+approached, decode never exercised, and therefore a perfectly flat curve. The
+validity checks guard the *measurement*; nothing guards the *workload*. Pin
+output length with `ignore_eos`, and check throughput against arrival rate
+before believing a flat line.
+
 ### 5.4 Phase 5 — the two knobs, and Little's Law
+
+**Phase 4 already picked the knob.** The curve measured on a T4 shows the
+running batch growing 4 → 100 while queue depth stays at zero and the KV cache
+never passes 2.9%. With `max_num_seqs=256` the scheduler admits nearly
+everything rather than queueing it, so past ~65 concurrent sequences the GPU
+cannot drive the batch and every request degrades together — goodput collapses
+69% between 16.5 and 24 req/s while throughput *rises*. Lowering the cap should
+trade a little peak throughput for a materially higher sustainable rate, by
+making the engine queue instead of degrading everyone. That is a hypothesis with
+a measurement behind it rather than a guess.
 
 - `max_num_seqs` — the ceiling on sequences in the running batch
 - `max_num_batched_tokens` — the token budget for a single engine step, which
@@ -651,9 +692,26 @@ Prometheus 2.55.1 and Grafana 11.3.1 have been started against the committed
 configuration: 11/11 dashboard panels returning data, 13 rules loaded with none
 in error, the datasource resolved by uid and a query answered through Grafana.
 
-**Still not done, and say so:** only one concurrency point has been measured, so
-there are still no percentile curves and no goodput — that is Phase 4, and
-`smoke` is labelled a sanity check precisely because it is closed-loop. The
+### Phase 4 — the curve
+
+**16.5 req/s** within TTFT < 1 s and TPOT < 50 ms, on one T4. Open-loop Poisson
+arrivals, 128 in and 128 out, eight rates. Peak goodput 13.54 req/s.
+
+The number to lead with is the comparison: pushing from 16.5 to 24 req/s raised
+output throughput 7.7% (1,732 → 1,865 tok/s) and cut goodput 69% (13.54 → 4.25
+req/s), with p50 TTFT going from 120 ms to 5.08 s. A throughput-only benchmark
+calls the second one the better result.
+
+**Volunteer what it corrected.** Queue depth stayed at zero through that
+collapse and the KV cache peaked at 2.9%; what moved was the running batch,
+4 → 100. §5.2 of this guide called queue depth the leading indicator, and on
+this workload it is not — `max_num_seqs=256` means the scheduler admits rather
+than queues. The binding constraint is compute, Phase 1's 78.84× headroom is
+unreachable at this shape, and the fix is a knob, which is Phase 5.
+
+**Still not done, and say so:** nothing has been tuned — the curve describes the
+`colab-t4` profile exactly as Phase 1 left it. One workload, one run per rate,
+so no error bars. The
 Phase 1 and Phase 3 numbers are unpaired. Tensor parallelism is untested; two
 T4s were attached and `colab-t4` uses one. `local-cpu` has still never run a
 real vLLM, and will not without a source build — vLLM ships CUDA-only Linux
@@ -959,9 +1017,10 @@ feature rather than a debugging afternoon.
 > and Grafana both started against the committed configuration. CI runs lint,
 > types, tests, the measurement script and promtool.
 >
-> What is genuinely missing is Phase 4 onwards: there is still exactly one
-> concurrency point, closed-loop, so no latency-versus-arrival-rate curve and no
-> goodput. Then tuning, quantisation, routing, the SGLang comparison and the
+> What is genuinely missing is Phase 5 onwards: nothing has been *tuned*. The
+> Phase 4 curve describes the profile exactly as Phase 1 left it, with one
+> workload and one run per rate, so there are no error bars and no Pareto
+> frontier yet. Then quantisation, routing, the SGLang comparison and the
 > report.
 
 **"What is the weakest part of the project right now?"**
@@ -1128,7 +1187,7 @@ inferstack doctor --profile colab-t4 --strict
 Run the checks:
 
 ```bash
-pytest              # 302 tests
+pytest              # 364 tests
 ruff check .        # lint (incl. bandit security rules)
 ```
 
