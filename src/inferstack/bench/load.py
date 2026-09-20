@@ -46,26 +46,43 @@ class Workload:
     by the server, because this project does not ship a tokenizer and guessing
     at a token count is exactly the kind of unverified number it avoids. The
     measured value lands in ``prompt_tokens`` on each record.
+
+    **Output length is pinned, not capped.** ``max_tokens`` is a ceiling, and a
+    model that decides to stop early sails past it - the first version of this
+    workload asked the model to "summarise in one word" and got exactly what it
+    asked for: three tokens per response, at which point a sweep to 32 req/s
+    found no knee because decode was never exercised at all. ``ignore_eos``
+    makes every request emit exactly ``max_tokens``, so the offered work is the
+    same at every rate and output tokens per second means something.
+
+    ``ignore_eos`` is a vLLM extension rather than part of the OpenAI schema. It
+    reaches the engine because the gateway forwards bodies unmodified
+    (ADR-0006); against a server that does not support it the parameter is
+    ignored and output length becomes model-dependent again, which is why the
+    *measured* token count is recorded per request rather than assumed.
     """
 
     approx_prompt_tokens: int = 128
     max_tokens: int = 128
     temperature: float = 0.0
+    ignore_eos: bool = True
     # Greedy by default: sampling would make output length vary run to run, and
     # output length is the denominator of every per-token number here.
     word: str = "context"
 
     def messages(self) -> list[dict[str, str]]:
         body = " ".join([self.word] * max(self.approx_prompt_tokens - 8, 1))
-        return [
-            {"role": "user", "content": f"Summarise the following in one word: {body}"},
-        ]
+        return [{"role": "user", "content": f"Continue this text at length: {body}"}]
+
+    def extra(self) -> dict[str, Any]:
+        return {"ignore_eos": True} if self.ignore_eos else {}
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "approx_prompt_tokens": self.approx_prompt_tokens,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
+            "ignore_eos": self.ignore_eos,
         }
 
 
@@ -181,6 +198,7 @@ async def _one_request(
             workload.messages(),
             max_tokens=workload.max_tokens,
             temperature=workload.temperature,
+            extra=workload.extra(),
         )
     except Exception as exc:  # noqa: BLE001 - one bad request must not end the run
         records.append(

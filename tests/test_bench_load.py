@@ -25,12 +25,14 @@ class FakeEngine:
         self.latency_s = latency_s
         self.fail_every = fail_every
         self.arrivals: list[float] = []
+        self.extras: list[dict] = []
         self.origin = time.perf_counter()
         self.concurrent = 0
         self.max_concurrent = 0
 
     async def chat_stream(self, messages, max_tokens=128, temperature=0.0, **kwargs):
         self.arrivals.append(time.perf_counter() - self.origin)
+        self.extras.append(kwargs.get("extra") or {})
         self.concurrent += 1
         self.max_concurrent = max(self.max_concurrent, self.concurrent)
         try:
@@ -211,3 +213,40 @@ async def test_a_real_poisson_schedule_runs_end_to_end() -> None:
 
     assert len(result.records) == len(schedule)
     assert result.max_schedule_lag_s < 0.25, "the generator itself fell behind"
+
+
+# --- the workload itself ---------------------------------------------------
+
+
+async def test_the_runner_asks_the_engine_to_ignore_eos() -> None:
+    """max_tokens is a ceiling; a model that stops early sails past it.
+
+    The first version of this workload asked for a one-word summary and got
+    exactly that - three tokens per response - so a sweep to 32 req/s found no
+    knee, because decode was never exercised. Pinning output length is what
+    makes tokens per second mean anything and what makes every rate step offer
+    the same work.
+    """
+    engine = FakeEngine(latency_s=0.0)
+    schedule = ArrivalSchedule((0.01, 0.02), rate_per_s=100.0)
+
+    await run_open_loop(engine, schedule, Workload())  # type: ignore[arg-type]
+
+    assert engine.extras == [{"ignore_eos": True}, {"ignore_eos": True}]
+
+
+async def test_ignore_eos_can_be_turned_off() -> None:
+    """It is a vLLM extension, not part of the OpenAI schema."""
+    engine = FakeEngine(latency_s=0.0)
+    schedule = ArrivalSchedule((0.01,), rate_per_s=100.0)
+
+    await run_open_loop(engine, schedule, Workload(ignore_eos=False))  # type: ignore[arg-type]
+
+    assert engine.extras == [{}]
+
+
+def test_the_prompt_does_not_invite_a_short_answer() -> None:
+    """The bug was in the wording, so the wording is asserted."""
+    content = Workload().messages()[0]["content"]
+    assert "one word" not in content.lower()
+    assert "summarise the following in one word" not in content.lower()

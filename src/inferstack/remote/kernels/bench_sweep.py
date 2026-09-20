@@ -44,11 +44,14 @@ BRANCH = os.environ.get("INFERSTACK_BRANCH", "phase-04-bench")
 PROFILE = os.environ.get("INFERSTACK_PROFILE", "colab-t4")
 
 # A ladder wide enough to straddle the knee. Phase 1 measured ~493 tok/s at a
-# batch of 8; at 128 output tokens per request that is roughly 4 req/s, and the
-# engine reported headroom for 78x concurrency - so the interesting region is
-# expected somewhere in the teens and the top of the ladder is set well past it.
-# Being wrong in either direction is visible in the curve rather than fatal.
-RATES = [float(r) for r in os.environ.get("INFERSTACK_RATES", "1,2,4,8,12,16,24,32").split(",")]
+# batch of 8 and the engine reported headroom for 78x concurrency, so at 128
+# output tokens per request the interesting region is expected in the teens.
+#
+# The first attempt at this ran 1..32 req/s and found a perfectly flat curve -
+# not because the engine was that fast, but because the workload asked for a
+# one-word summary and got three tokens per response. Output length is now
+# pinned with ignore_eos, and the ladder is denser where the knee is expected.
+RATES = [float(r) for r in os.environ.get("INFERSTACK_RATES", "1,2,4,6,8,12,16,24").split(",")]
 DURATION_S = float(os.environ.get("INFERSTACK_STEP_DURATION", "30"))
 PROMPT_TOKENS = int(os.environ.get("INFERSTACK_PROMPT_TOKENS", "128"))
 MAX_TOKENS = int(os.environ.get("INFERSTACK_MAX_TOKENS", "128"))
@@ -181,7 +184,7 @@ def step_sweep(base_url: str, engine_root: str, model: str) -> bool:
     import asyncio
 
     from inferstack.bench.load import Workload
-    from inferstack.bench.report import ServiceLevel
+    from inferstack.bench.report import ServiceLevel, StepSummary
     from inferstack.bench.sweep import SweepConfig, run_sweep
 
     config = SweepConfig(
@@ -195,7 +198,7 @@ def step_sweep(base_url: str, engine_root: str, model: str) -> bool:
     )
     print(json.dumps(config.to_dict(), indent=2), flush=True)
 
-    def announce(step) -> None:
+    def announce(step: StepSummary) -> None:
         state = "ok" if step.healthy else "SLO MISS"
         peak = step.engine.get("peak", {})
         print(

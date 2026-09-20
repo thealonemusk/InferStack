@@ -226,3 +226,64 @@ async def test_a_curve_can_be_plotted_without_a_display() -> None:
         out = Path(tmp)
         assert plot_goodput(report, out / "goodput.png").stat().st_size > 5_000
         assert plot_sweep(report, out / "sweep.png").stat().st_size > 10_000
+
+
+# --- replaying a finished run ---------------------------------------------
+
+
+async def test_a_finished_run_can_be_re_judged_against_a_different_slo(
+    tmp_path: Path,
+) -> None:
+    """The reason records are written at all.
+
+    A capacity number is a function of the measurement *and* the service level,
+    and only one of those needs a GPU. The same run is one number for an
+    interactive product and quite another for an overnight batch job, and
+    finding out must not cost a second session.
+    """
+    from inferstack.bench.records import reanalyse
+
+    cfg = config([10.0, 20.0, 60.0], duration=1.5)
+    cfg.records_dir = tmp_path / "records"
+    await sweep(SimulatedEngine(), cfg)
+
+    strict = reanalyse(cfg.records_dir, ServiceLevel(ttft_s=0.05, tpot_s=0.1, name="strict"))
+    lenient = reanalyse(cfg.records_dir, ServiceLevel(ttft_s=10.0, tpot_s=10.0, name="batch"))
+
+    strict_limit = strict.max_sustainable_rate_per_s or 0.0
+    lenient_limit = lenient.max_sustainable_rate_per_s or 0.0
+    assert lenient_limit > strict_limit, "a looser target must not reduce capacity"
+    assert lenient.slo.name == "batch"
+
+
+async def test_replay_reproduces_the_numbers_it_was_given(tmp_path: Path) -> None:
+    """Re-aggregating must not re-derive. Every latency here was measured once."""
+    from inferstack.bench.records import load_sweep, reanalyse
+
+    cfg = config([10.0, 20.0], duration=1.5)
+    cfg.records_dir = tmp_path / "records"
+    live, results = await sweep(SimulatedEngine(), cfg)
+
+    replayed = reanalyse(cfg.records_dir, cfg.slo)
+
+    assert len(replayed.steps) == len(live.steps)
+    for original, again in zip(live.ordered, replayed.ordered, strict=True):
+        assert again.sent == original.sent
+        assert again.completed == original.completed
+        assert again.met_slo == original.met_slo
+        # Exact to the file's own precision: timestamps are written rounded to
+        # microseconds, so the schedule lag - and with it TTFT from the schedule
+        # clock - can differ in the last decimal place. Anything larger would
+        # mean the replay is computing rather than re-aggregating.
+        assert again.ttft_p99_s == pytest.approx(original.ttft_p99_s, abs=2e-6)
+
+    # The offsets come back off disk rather than being regenerated from a seed.
+    loaded = load_sweep(cfg.records_dir)
+    assert [len(r.records) for r in loaded] == [len(r.records) for r in results]
+
+
+def test_replaying_an_empty_directory_says_so(tmp_path: Path) -> None:
+    from inferstack.bench.records import reanalyse
+
+    with pytest.raises(FileNotFoundError, match="rate-"):
+        reanalyse(tmp_path, ServiceLevel())

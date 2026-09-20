@@ -100,7 +100,12 @@ async def _warm_up(client: EngineClient, workload: Workload, count: int) -> None
         return
     await asyncio.gather(
         *(
-            client.chat_stream(workload.messages(), max_tokens=8, temperature=0.0)
+            client.chat_stream(
+                workload.messages(),
+                max_tokens=8,
+                temperature=0.0,
+                extra=workload.extra(),
+            )
             for _ in range(count)
         ),
         return_exceptions=True,

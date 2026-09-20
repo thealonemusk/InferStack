@@ -14,6 +14,7 @@ The commands, in the order a session tends to use them:
     inferstack gateway             run the OpenAI-compatible edge
     inferstack metrics             read the engine's Prometheus signals
     inferstack bench               map the latency/throughput curve
+    inferstack analyse             re-judge a finished sweep against another SLO
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from inferstack.bench.load import Workload
+from inferstack.bench.records import reanalyse
 from inferstack.bench.report import ServiceLevel, StepSummary, SweepReport
 from inferstack.bench.sweep import SweepConfig, run_sweep
 from inferstack.compat import Issue, check_profile, worst_severity
@@ -1077,6 +1079,59 @@ def bench(
     # server, so it must not exit 0 and be mistaken for one.
     if not report.generator_kept_up:
         raise typer.Exit(1)
+
+
+@app.command()
+def analyse(
+    records: Annotated[Path, typer.Argument(help="Directory of rate-*.jsonl files from a sweep.")],
+    ttft_slo: Annotated[float, typer.Option("--ttft-slo")] = 1.0,
+    tpot_slo: Annotated[float, typer.Option("--tpot-slo")] = 0.05,
+    name: Annotated[str, typer.Option("--name", help="Label for this service level.")] = "custom",
+    plot: Annotated[bool, typer.Option("--plot")] = False,
+    out: Annotated[Path | None, typer.Option("--out")] = None,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Re-judge a finished sweep against a different service level.
+
+    The measurement is fixed; the verdict is not. The same run is a capacity of
+    one number for an interactive product and quite another for an overnight
+    batch job, and finding out costs a file read rather than another GPU
+    session:
+
+        inferstack analyse artifacts/.../records --ttft-slo 5 --tpot-slo 0.2 --name batch
+
+    Nothing is re-derived here. Every latency was measured when the request ran
+    and written down; this only re-aggregates them.
+    """
+    try:
+        report = reanalyse(records, ServiceLevel(ttft_s=ttft_slo, tpot_s=tpot_slo, name=name))
+    except FileNotFoundError as exc:
+        err_console.print(f"[bold red]{exc}[/bold red]")
+        raise typer.Exit(1) from exc
+
+    if as_json:
+        console.print_json(json.dumps(report.to_dict()))
+    else:
+        console.print(
+            f"[dim]{records} re-judged against {name}: "
+            f"TTFT < {ttft_slo:g}s, TPOT < {tpot_slo:g}s[/dim]"
+        )
+        _render_sweep(report)
+
+    destination = out or records.parent
+    destination.mkdir(parents=True, exist_ok=True)
+    payload = destination / f"sweep-{name}.json"
+    payload.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    console.print(f"[dim]{payload}[/dim]")
+
+    if plot:
+        try:
+            from inferstack.bench.plots import plot_goodput, plot_sweep
+
+            console.print(f"[dim]{plot_goodput(report, destination / f'goodput-{name}.png')}[/dim]")
+            console.print(f"[dim]{plot_sweep(report, destination / f'sweep-{name}.png')}[/dim]")
+        except ImportError as exc:
+            err_console.print(f"[yellow]{exc}[/yellow]")
 
 
 @app.command()
