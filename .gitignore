@@ -24,6 +24,12 @@ models/
 .cache/
 huggingface/
 
+# Remote execution scratch: the folder pushed to Kaggle is assembled from
+# src/inferstack/remote/kernels/, and the folder pulled back is raw session
+# output. Committing either would duplicate the source or the artifacts.
+kernel-build*/
+kaggle-out*/
+
 # Benchmark artifacts: raw runs are local, curated results are committed
 artifacts/runs/
 artifacts/**/*.raw.jsonl

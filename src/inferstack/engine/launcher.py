@@ -21,6 +21,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -258,7 +259,10 @@ class EngineProcess:
 
         # A new process group lets us signal the engine and its workers together;
         # tensor-parallel vLLM spawns children that must die with the parent.
-        creation_kwargs: dict[str, object] = {}
+        # `Any`, not `object`: these are platform-specific Popen keywords and
+        # CREATE_NEW_PROCESS_GROUP does not exist off Windows, so the call has to
+        # stay keyword-splatted rather than duplicated per platform.
+        creation_kwargs: dict[str, Any] = {}
         if sys.platform == "win32":
             creation_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
@@ -271,7 +275,7 @@ class EngineProcess:
             text=True,
             bufsize=1,
             env=build_env(self.cfg),
-            **creation_kwargs,  # type: ignore[arg-type]
+            **creation_kwargs,
         )
         self._reader = threading.Thread(target=self._pump_output, daemon=True)
         self._reader.start()

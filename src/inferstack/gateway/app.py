@@ -81,7 +81,9 @@ def _hold_slot_until_stream_ends(
     original = response.body_iterator
     origin = started if started is not None else time.perf_counter()
 
-    async def wrapped() -> AsyncIterator[bytes]:
+    # Starlette's body iterator yields str, bytes or memoryview - relaying it
+    # as bytes-only would be a claim about the upstream response we do not check.
+    async def wrapped() -> AsyncIterator[str | bytes | memoryview]:
         chunks = 0
         completed = False
         try:

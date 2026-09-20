@@ -42,6 +42,10 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - the engine is only imported once installed
+    from inferstack.engine.launcher import EngineProcess
 
 REPO = "https://github.com/thealonemusk/InferStack"
 BRANCH = os.environ.get("INFERSTACK_BRANCH", "phase-03-observability")
@@ -231,7 +235,7 @@ def step_doctor() -> bool:
     return True
 
 
-def step_start_engine():
+def step_start_engine() -> EngineProcess:
     section("3. ENGINE")
     from inferstack.config import load_settings
     from inferstack.engine.launcher import (
@@ -285,7 +289,7 @@ def step_engine_metrics_idle(engine_root: str) -> None:
     save()
 
 
-def step_start_gateway(upstream_base_url: str):
+def step_start_gateway(upstream_base_url: str) -> subprocess.Popen[bytes]:
     section("5. GATEWAY")
     env = dict(os.environ)
     env["INFERSTACK_PROFILE"] = PROFILE
