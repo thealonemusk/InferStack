@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -381,6 +382,188 @@ def check_rules() -> dict[str, Any]:
     }
 
 
+# --- Grafana --------------------------------------------------------------
+#
+# Prometheus answering a query proves the PromQL is right. It says nothing about
+# whether Grafana loads the dashboard, resolves the datasource uid the panels
+# refer to, or can reach Prometheus at the URL the provisioning file gives. Those
+# are three separate ways for every panel to read "No data" with correct queries
+# behind it.
+
+GRAFANA_PORT = 13000
+GRAFANA_URL = f"http://127.0.0.1:{GRAFANA_PORT}"
+GRAFANA_ADMIN_PASSWORD = "verify-run-only"  # noqa: S105 - a throwaway local run
+
+PROVISIONING_SRC = REPO / "deploy" / "compose" / "grafana" / "provisioning"
+DASHBOARDS_SRC = REPO / "deploy" / "compose" / "grafana" / "dashboards"
+
+
+def grafana_api(path: str, payload: dict | None = None) -> Any:
+    """Call Grafana's API with basic auth.
+
+    The compose file disables the login form and grants anonymous *Viewer*,
+    which cannot read the datasource list - so this run sets an admin password
+    and authenticates. That is a deviation from what ships, and it is confined
+    to the checks; the provisioning files and the anonymous-viewer settings are
+    the committed ones.
+    """
+    import base64
+
+    request = urllib.request.Request(f"{GRAFANA_URL}{path}")  # noqa: S310 - localhost
+    token = base64.b64encode(f"admin:{GRAFANA_ADMIN_PASSWORD}".encode()).decode()
+    request.add_header("Authorization", f"Basic {token}")
+    if payload is not None:
+        request.data = json.dumps(payload).encode()
+        request.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 - localhost
+        return json.loads(response.read().decode("utf-8", errors="replace"))
+
+
+def write_provisioning(work: Path) -> Path:
+    """Copy the committed provisioning tree, rewriting only what is container-specific.
+
+    Two paths cannot survive outside the compose network: the datasource URL
+    points at the ``prometheus`` service name, and the dashboard provider points
+    at ``/var/lib/grafana/dashboards``. Everything else - the fixed datasource
+    uid the panels depend on, ``allowUiUpdates: false``, the provider name - is
+    exactly what ships.
+    """
+    provisioning = work / "provisioning"
+    if provisioning.exists():
+        shutil.rmtree(provisioning)
+    shutil.copytree(PROVISIONING_SRC, provisioning)
+
+    dashboards = work / "dashboards"
+    if dashboards.exists():
+        shutil.rmtree(dashboards)
+    shutil.copytree(DASHBOARDS_SRC, dashboards)
+
+    datasource = provisioning / "datasources" / "prometheus.yml"
+    text = datasource.read_text(encoding="utf-8")
+    if "http://prometheus:9090" not in text:
+        raise RuntimeError(
+            "the committed datasource URL is no longer http://prometheus:9090, so this "
+            "rewrite would silently verify a datasource pointing somewhere else"
+        )
+    datasource.write_text(text.replace("http://prometheus:9090", PROM_URL), encoding="utf-8")
+
+    provider = provisioning / "dashboards" / "dashboards.yml"
+    text = provider.read_text(encoding="utf-8")
+    if "/var/lib/grafana/dashboards" not in text:
+        raise RuntimeError(
+            "the committed dashboards provider path changed; this rewrite would leave "
+            "Grafana provisioning from a directory that does not exist here"
+        )
+    provider.write_text(
+        text.replace("/var/lib/grafana/dashboards", dashboards.resolve().as_posix()),
+        encoding="utf-8",
+    )
+    return provisioning
+
+
+def start_grafana(home: Path, provisioning: Path, work: Path) -> subprocess.Popen[bytes]:
+    binary = home / "bin" / "grafana-server.exe"
+    if not binary.is_file():
+        binary = home / "bin" / "grafana-server"
+    if not binary.is_file():
+        raise FileNotFoundError(f"no grafana-server under {home / 'bin'}")
+
+    env = dict(os.environ)
+    (work / "grafana-data").mkdir(parents=True, exist_ok=True)
+    (work / "grafana-logs").mkdir(parents=True, exist_ok=True)
+
+    env.update(
+        {
+            "GF_PATHS_PROVISIONING": str(provisioning.resolve()),
+            "GF_PATHS_DATA": str((work / "grafana-data").resolve()),
+            "GF_PATHS_LOGS": str((work / "grafana-logs").resolve()),
+            "GF_SERVER_HTTP_PORT": str(GRAFANA_PORT),
+            "GF_SECURITY_ADMIN_PASSWORD": GRAFANA_ADMIN_PASSWORD,
+            # From the compose file, so provisioning behaves as it ships.
+            "GF_AUTH_ANONYMOUS_ENABLED": "true",
+            "GF_AUTH_ANONYMOUS_ORG_ROLE": "Viewer",
+            "GF_ANALYTICS_REPORTING_ENABLED": "false",
+            "GF_ANALYTICS_CHECK_FOR_UPDATES": "false",
+        }
+    )
+
+    log = (work / "grafana.log").open("wb")
+    process = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
+        [str(binary), "--homepath", str(home)],
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        env=env,
+        cwd=str(home),
+    )
+
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"grafana exited early; see {work / 'grafana.log'}")
+        try:
+            health = grafana_api("/api/health")
+            if health.get("database") == "ok":
+                return process
+        except Exception:  # noqa: BLE001 - polling a process that is still starting
+            time.sleep(1.0)
+    process.terminate()
+    raise RuntimeError(f"grafana never became healthy; see {work / 'grafana.log'}")
+
+
+def check_grafana() -> dict[str, Any]:
+    """Did provisioning actually work, and can Grafana reach Prometheus?"""
+    health = grafana_api("/api/health")
+
+    datasources = grafana_api("/api/datasources")
+    provisioned_uid = yaml.safe_load(
+        (PROVISIONING_SRC / "datasources" / "prometheus.yml").read_text(encoding="utf-8")
+    )["datasources"][0]["uid"]
+    matching = [d for d in datasources if d.get("uid") == provisioned_uid]
+
+    dashboard_uid = json.loads(DASHBOARD.read_text(encoding="utf-8"))["uid"]
+    search = grafana_api("/api/search?type=dash-db")
+    loaded = grafana_api(f"/api/dashboards/uid/{dashboard_uid}")
+
+    # The end-to-end wiring: a query issued to Grafana, resolved by uid, proxied
+    # to Prometheus at the provisioned URL, and answered.
+    through_grafana = grafana_api(
+        "/api/ds/query",
+        {
+            "queries": [
+                {
+                    "refId": "A",
+                    "datasource": {"uid": provisioned_uid, "type": "prometheus"},
+                    "expr": "vllm:num_requests_running",
+                    "instant": True,
+                    "intervalMs": 1000,
+                    "maxDataPoints": 100,
+                }
+            ],
+            "from": "now-5m",
+            "to": "now",
+        },
+    )
+    frames = through_grafana.get("results", {}).get("A", {}).get("frames", [])
+
+    return {
+        "version": health.get("version"),
+        "database": health.get("database"),
+        "datasource_uid_provisioned": provisioned_uid,
+        "datasource_found": bool(matching),
+        "datasource_url": matching[0].get("url") if matching else None,
+        "dashboards_listed": [d.get("uid") for d in search],
+        "dashboard_uid": dashboard_uid,
+        "dashboard_title": loaded.get("dashboard", {}).get("title"),
+        "dashboard_panels": len(loaded.get("dashboard", {}).get("panels", [])),
+        "dashboard_is_provisioned": bool(loaded.get("meta", {}).get("provisioned")),
+        "query_through_grafana_returned_frames": len(frames),
+        "ok": bool(matching)
+        and dashboard_uid in [d.get("uid") for d in search]
+        and bool(loaded.get("meta", {}).get("provisioned"))
+        and len(frames) > 0,
+    }
+
+
 def _relative(path: Path) -> str:
     """Repo-relative when possible; an absolute path is still worth recording."""
     resolved = path.resolve()
@@ -399,13 +582,22 @@ def main() -> int:
         default=DEFAULT_ENGINE_METRICS,
         help="Exposition text to serve as the engine. Use a real capture when there is one.",
     )
-    parser.add_argument("--work", type=Path, default=Path("./.prometheus-verify"))
+    parser.add_argument(
+        "--grafana",
+        type=Path,
+        default=None,
+        help="Grafana home directory (the extracted release). Omit to skip Grafana.",
+    )
+    parser.add_argument("--work", type=Path, default=Path("./.stack-verify"))
     parser.add_argument("--out", type=Path, default=OUT_DIR)
     parser.add_argument("--load-seconds", type=float, default=12.0)
     args = parser.parse_args()
 
     configure_logging("ERROR", "console")
-    work: Path = args.work
+    # Absolute: Grafana is started with cwd set to its own home directory, so a
+    # relative data path resolves under the release rather than here - which it
+    # then fails to create, with an error about a path nobody wrote.
+    work: Path = args.work.resolve()
     work.mkdir(parents=True, exist_ok=True)
 
     base_text = args.engine_metrics.read_text(encoding="utf-8")
@@ -444,6 +636,22 @@ def main() -> int:
         results["dashboard"] = check_panels()
         print("checking rules...", flush=True)
         results["rules"] = check_rules()
+
+        if args.grafana is not None:
+            print("starting grafana...", flush=True)
+            provisioning = write_provisioning(work)
+            grafana = start_grafana(args.grafana, provisioning, work)
+            try:
+                print("checking grafana provisioning...", flush=True)
+                results["grafana"] = check_grafana()
+            finally:
+                grafana.terminate()
+                try:
+                    grafana.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    grafana.kill()
+        else:
+            results["grafana"] = {"skipped": "no --grafana given"}
     finally:
         if prometheus is not None:
             prometheus.terminate()
@@ -457,7 +665,7 @@ def main() -> int:
 
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
-    raw = out / "prometheus-verification.json"
+    raw = out / "stack-verification.json"
     raw.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
 
     dash = results.get("dashboard", {})
@@ -473,12 +681,26 @@ def main() -> int:
     print(f"rules with errors: {rules.get('rules_with_errors')}")
     print(f"recorded values  : {rules.get('recorded_values')}")
     print(f"alerts firing    : {rules.get('firing')}")
+    grafana = results.get("grafana", {})
+    if "skipped" not in grafana:
+        print(f"grafana          : {grafana.get('version')} db={grafana.get('database')}")
+        print(
+            f"  datasource     : found={grafana.get('datasource_found')} "
+            f"url={grafana.get('datasource_url')}"
+        )
+        print(
+            f"  dashboard      : {grafana.get('dashboard_title')!r} "
+            f"panels={grafana.get('dashboard_panels')} "
+            f"provisioned={grafana.get('dashboard_is_provisioned')}"
+        )
+        print(f"  query via grafana frames: {grafana.get('query_through_grafana_returned_frames')}")
     print(f"\nwrote {raw}", flush=True)
 
     healthy = (
         dash.get("panels_with_data") == dash.get("panels_total")
         and not dash.get("query_errors")
         and not rules.get("rules_with_errors")
+        and ("skipped" in grafana or grafana.get("ok"))
     )
     return 0 if healthy else 1
 

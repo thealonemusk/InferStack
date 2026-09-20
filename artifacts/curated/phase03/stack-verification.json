@@ -1,16 +1,16 @@
 {
-  "verified_at": "2026-09-20T11:09:02+00:00",
+  "verified_at": "2026-09-20T11:16:12+00:00",
   "prometheus_version": [],
   "engine_metrics_source": "tests/fixtures/vllm_metrics_real.txt",
   "engine_metrics_is_a_real_capture": true,
   "targets": {
     "inferstack-gateway": "up",
-    "prometheus": "unknown",
+    "prometheus": "up",
     "vllm": "up"
   },
   "load": {
-    "completed": 140,
-    "abandoned_streams": 35
+    "completed": 104,
+    "abandoned_streams": 26
   },
   "dashboard": {
     "panels": [
@@ -58,19 +58,19 @@
           {
             "legend": "p50",
             "series": 1,
-            "sample": "0.049999999999999996",
+            "sample": "0.05",
             "error": null
           },
           {
             "legend": "p95",
             "series": 1,
-            "sample": "1.749999999999999",
+            "sample": "1.75",
             "error": null
           },
           {
             "legend": "p99",
             "series": 1,
-            "sample": "2.3499999999999996",
+            "sample": "2.3500000000000005",
             "error": null
           }
         ],
@@ -95,13 +95,13 @@
           {
             "legend": "TPOT p99",
             "series": 1,
-            "sample": "0.024850000000000004",
+            "sample": "0.02485",
             "error": null
           },
           {
             "legend": "ITL p99",
             "series": 1,
-            "sample": "0.024849738219895286",
+            "sample": "0.02484973821989529",
             "error": null
           }
         ],
@@ -127,13 +127,13 @@
           {
             "legend": "output tok/s",
             "series": 1,
-            "sample": "172.81533333333334",
+            "sample": "182.54866666666666",
             "error": null
           },
           {
             "legend": "prompt tok/s",
             "series": 1,
-            "sample": "156.91533333333334",
+            "sample": "165.72216666666665",
             "error": null
           }
         ],
@@ -177,7 +177,7 @@
           {
             "legend": "admitted/s",
             "series": 1,
-            "sample": "2.996385117263269",
+            "sample": "2.2248055555555553",
             "error": null
           }
         ],
@@ -190,7 +190,7 @@
           {
             "legend": "{{status}}",
             "series": 1,
-            "sample": "3.121865732918484",
+            "sample": "2.4615086111111113",
             "error": null
           }
         ],
@@ -203,13 +203,13 @@
           {
             "legend": "gateway p95",
             "series": 1,
-            "sample": "0.0336",
+            "sample": "0.03981818181818182",
             "error": null
           },
           {
             "legend": "gateway p99",
             "series": 1,
-            "sample": "0.03871999999999999",
+            "sample": "0.05560000000000001",
             "error": null
           },
           {
@@ -234,7 +234,7 @@
           {
             "legend": "abandoned/s",
             "series": 1,
-            "sample": "0.5688379700555815",
+            "sample": "0.39250444444444443",
             "error": null
           }
         ],
@@ -274,8 +274,8 @@
     ],
     "rules_with_errors": [],
     "recorded_values": {
-      "inferstack:ttft_seconds:p99": "2.3499999999999988",
-      "inferstack:tpot_seconds:p99": "0.024849999999999997",
+      "inferstack:ttft_seconds:p99": "2.3499999999999996",
+      "inferstack:tpot_seconds:p99": "0.02485",
       "inferstack:itl_seconds:p99": "0.02484973821989529"
     },
     "alert_states": {
@@ -286,10 +286,26 @@
       "GatewaySheddingLoad": "inactive",
       "KVCacheNearlyFull": "inactive",
       "QueueDepthSustained": "inactive",
-      "StreamsBeingAbandoned": "pending",
+      "StreamsBeingAbandoned": "inactive",
       "TimePerOutputTokenSlow": "inactive",
       "TimeToFirstTokenSlow": "pending"
     },
     "firing": []
+  },
+  "grafana": {
+    "version": "11.3.1",
+    "database": "ok",
+    "datasource_uid_provisioned": "inferstack-prometheus",
+    "datasource_found": true,
+    "datasource_url": "http://127.0.0.1:19090",
+    "dashboards_listed": [
+      "inferstack-inference"
+    ],
+    "dashboard_uid": "inferstack-inference",
+    "dashboard_title": "InferStack - inference",
+    "dashboard_panels": 11,
+    "dashboard_is_provisioned": true,
+    "query_through_grafana_returned_frames": 1,
+    "ok": true
   }
 }

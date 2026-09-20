@@ -29,7 +29,7 @@ huggingface/
 # output. Committing either would duplicate the source or the artifacts.
 kernel-build*/
 kaggle-out*/
-.prometheus-verify/
+.stack-verify/
 
 # Benchmark artifacts: raw runs are local, curated results are committed
 artifacts/runs/
