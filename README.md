@@ -100,9 +100,10 @@ inferstack metrics --url http://your-host:8000
 +-----------------------------------------------------------------+
 ```
 
-*That output is rendered from the synthetic fixture in `tests/fixtures/`, not
-from a running engine — no real vLLM has been scraped yet. The command is
-tested; the numbers in it are made up.*
+*Output rendered from the synthetic fixture in `tests/fixtures/`, so the
+numbers above are made up. The metric names and labels are not: they come from
+[a capture taken off a real vLLM 0.29.0](tests/fixtures/vllm_metrics_real.txt),
+and a test asserts every signal this command looks for exists in it.*
 
 Load is printed above latency deliberately: a p99 of 4 s means one thing at
 queue depth 60 and something entirely different at queue depth 0. Percentiles
@@ -145,7 +146,7 @@ goodput), the architecture, and every decision with its reasoning.
 | 0 | Foundations: execution profiles, hardware probe, config, ADRs | ✅ done |
 | 1 | vLLM serving + continuous batching proven on real hardware | ✅ **done** |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ **done** |
-| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | ✅ **done** — but not yet scraped from a real vLLM |
+| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | ✅ **done**, verified against a real vLLM |
 | 4 | Benchmark harness: Poisson arrivals, concurrency sweeps, p50/p95/p99 | next |
 | 5 | Continuous batching tuning, latency/throughput Pareto curves | |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, tensor parallelism | |
@@ -188,6 +189,13 @@ an upstream emitting SSE chunks 200 ms apart, time-to-first-byte through the
 gateway is 218 ms versus 229 ms direct. A buffering proxy would have shown
 ~1000 ms and silently destroyed the 26 ms TTFT above.
 
+**It knows what its own edge costs.** Phase 1's batching proof, re-run *through*
+the gateway against the same T4: **7.38× speedup versus 7.3× direct, 479 tok/s
+versus 493, TTFT 33 ms versus 26 ms.** So the gateway costs about 7 ms — and
+that figure is corroborated by an independent measurement on a different machine
+against a fake upstream, which put it at 7.5 ms. An HTTP hop costs what an HTTP
+hop costs; the instrumentation is not resolvable underneath it.
+
 **It reports latency as a distribution, and admits what that costs.** Percentiles
 come from Prometheus bucket counts, because a mean TTFT of 200 ms is compatible
 with a p99 of 8 s and percentiles cannot be recovered by averaging percentiles.
@@ -207,6 +215,22 @@ metrics-off over 300 requests. That is the resolution of the method, not a
 finding, and [the artifact says exactly
 that](artifacts/curated/phase03/gateway-metrics.md) instead of rounding it to
 "free".
+
+**It tests against a capture, not against its own assumptions.** Phase 3 shipped
+declaring vLLM's TPOT metric as `vllm:time_per_output_token_seconds`. The real
+engine emits `vllm:request_time_per_output_token_seconds` — and *nothing
+failed*: the signal read as missing, the Grafana panel read "No data", the alert
+stayed silent. Three symptoms indistinguishable from a healthy idle system, and
+all three survived because the fixture and the code were written from the same
+guess. There is now [a capture from a real
+engine](tests/fixtures/vllm_metrics_real.txt) and a test that every declared
+signal exists in it.
+
+**Its dashboard has actually been rendered.** Prometheus and Grafana are started
+against the committed configuration, every panel query is executed, and every
+rule is loaded — 11/11 panels returning data, 13 rules, zero errors. A panel
+whose PromQL is well-formed and returns nothing looks exactly like an idle
+system, so "the queries name real metrics" was never enough.
 
 ## Target hardware
 
@@ -275,6 +299,7 @@ src/inferstack/
 deploy/compose/       Prometheus + Grafana, dashboard included
 scripts/              one-off measurement scripts behind the artifacts
 artifacts/curated/    measured results, committed
+.github/workflows/    CI: lint, types, tests, the measurement, promtool
 docs/PROJECT-GUIDE.md theory, architecture, decisions
 docs/adr/             architecture decision records
 docs/phases/          what each phase built and how to verify it
@@ -283,7 +308,7 @@ docs/phases/          what each phase built and how to verify it
 ## Development
 
 ```bash
-pytest              # 271 tests
+pytest              # 302 tests
 ruff check .        # lint, including bandit security rules
 pre-commit install  # run both on every commit
 ```

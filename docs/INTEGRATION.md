@@ -68,7 +68,8 @@ bucket boundaries.
 Note the port: `/metrics` is on the **engine**, not on a gateway in front of
 it. If a signal is missing from the output it is listed as missing rather than
 shown as zero, because an idle engine and a wrong URL otherwise render
-identically.
+identically — and because that is how this project found it was asking vLLM for
+a TPOT metric by a name vLLM does not use.
 
 To capture a whole load episode rather than one instant — including from a
 session nothing outside can scrape:
@@ -280,22 +281,24 @@ Stated plainly so nothing below is a surprise:
 
 - **`serve` on its own is unauthenticated.** vLLM's endpoint has no API-key
   check; that lives in `inferstack gateway`, which must be put in front of it.
-  Do not expose `serve` directly.
+  Do not expose `serve` directly. The gateway itself has now run in front of a
+  real vLLM on a T4 and costs about 7 ms of TTFT.
 - **No per-key rate limiting.** The gateway's admission control is *global*: a
   fixed number of in-flight requests and a fast 429 beyond it. Per-key quotas
   are Phase 7.
-- **The gateway has never fronted a real vLLM.** Its pass-through and its
-  metrics were measured against a fake upstream on a laptop. It is wired
-  correctly and it has not been run in anger.
-- **No engine metrics have ever been scraped from a real vLLM.** `inferstack
-  metrics` is tested against a hand-written fixture. It accepts both
-  `vllm:kv_cache_usage_perc` and `vllm:gpu_cache_usage_perc` because which one
-  your engine emits has not been confirmed here — if the output says
-  `kv_cache_usage` is missing, that is worth reporting.
-- **The Prometheus/Grafana stack under `deploy/compose/` has never been
-  started.** No Docker on the development machine.
-- **No alerting and no tracing.** Prometheus is configured to scrape, not to
-  page, and nothing correlates one request across the gateway and the engine.
+- **No tracing.** Request ids reach the logs, but nothing correlates a single
+  request across the gateway and the engine. Deferred deliberately; see
+  ADR-0007.
+- **Metric names are confirmed against vLLM 0.29.0 only.** They come from a
+  capture, not a guess (`tests/fixtures/vllm_metrics_real.txt`), and older
+  spellings are accepted as aliases — but if `inferstack metrics` reports a
+  signal as *missing* against your engine, that is a version difference worth
+  reporting rather than an idle server.
+- **The compose stack's scrape targets are `host.docker.internal`.** Fine on
+  Docker Desktop, fine on Linux via the `extra_hosts` mapping, and wrong for
+  anything real: edit `deploy/compose/prometheus/prometheus.yml`.
+- **Alert thresholds are placeholders and say so.** A latency target is a
+  product decision; these are starting points, not SLOs.
 - **No multi-replica routing.** One engine per gateway. Phase 7.
 - **Single concurrency point only.** `smoke` is a closed-loop sanity check, so
   it sends *fewer* requests when the server slows down. Poisson arrivals,
