@@ -30,10 +30,12 @@ No GPU and no model: the upstream is a fake. The numbers here are about the
 gateway, and the comparisons are what carry meaning - not any single row.
 
     python scripts/measure_phase03.py
+    python scripts/measure_phase03.py --out /tmp/check   # without clobbering the artifact
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import statistics
@@ -333,12 +335,26 @@ async def run() -> dict[str, Any]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=OUT_DIR,
+        help=(
+            "Directory for the raw result. Defaults to the committed artifact "
+            "directory; point it elsewhere to run the measurement as a check "
+            "without overwriting a recorded run."
+        ),
+    )
+    args = parser.parse_args()
+
     # The gateway's own access log would otherwise interleave with the report
     # and, at debug level, add work to the path being measured.
     configure_logging("ERROR", "console")
     results = run_sync()
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    raw = OUT_DIR / "gateway-metrics.json"
+    out_dir: Path = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+    raw = out_dir / "gateway-metrics.json"
     raw.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     print(f"\nwrote {raw}")
     print(json.dumps(results, indent=2))
