@@ -133,7 +133,10 @@ def plot_goodput(report: SweepReport, path: Path, title: str | None = None) -> P
     if rates and completed[-1] - goodput[-1] > 0:
         ax.annotate(
             "completed, but too late to count",
-            xy=(rates[-1], (completed[-1] + goodput[-1]) / 2),
+            # High in the band rather than centred: the goodput line falls
+            # steeply across the shaded region, and the midpoint is exactly
+            # where it passes.
+            xy=(rates[-1], goodput[-1] + 0.85 * (completed[-1] - goodput[-1])),
             xytext=(-8, 0),
             textcoords="offset points",
             ha="right",
@@ -230,6 +233,23 @@ def plot_sweep(report: SweepReport, path: Path, title: str | None = None) -> Pat
     ax_good.legend(frameon=False, fontsize=8, loc="upper left")
 
     # 4. The explanation: what the engine was doing while the above happened.
+    #
+    # Running batch size is plotted first because on the hardware this was built
+    # for it is the signal that moves. Queue depth is the textbook leading
+    # indicator and it stays flat at zero whenever max_num_seqs is larger than
+    # the batch the GPU can actually drive - the scheduler admits everything,
+    # the batch grows, and latency degrades without anything ever queueing.
+    running = [step.engine.get("peak", {}).get("running") for step in report.ordered]
+    if any(r is not None for r in running):
+        ax_engine.plot(
+            [r for r, v in zip(rates, running, strict=False) if v is not None],
+            [v for v in running if v is not None],
+            color=GOOD,
+            linewidth=2.4,
+            marker="o",
+            markersize=4,
+            label="peak running batch",
+        )
     queue = [step.engine.get("peak", {}).get("waiting") for step in report.ordered]
     cache = [step.engine.get("peak", {}).get("kv_cache_usage") for step in report.ordered]
     preempt = [step.engine.get("preemptions_delta") for step in report.ordered]
@@ -267,7 +287,7 @@ def plot_sweep(report: SweepReport, path: Path, title: str | None = None) -> Pat
         twin.set_ylabel("KV cache (%)", fontsize=9, color=ACCENT)
         twin.tick_params(colors=ACCENT, labelsize=8)
         twin.spines["top"].set_visible(False)
-    _style(ax_engine, "Why: engine state", "offered rate (req/s)", "queue depth / preemptions")
+    _style(ax_engine, "Why: engine state", "offered rate (req/s)", "sequences / preemptions")
     ax_engine.legend(frameon=False, fontsize=8, loc="upper left")
 
     heading = title or f"InferStack sweep{' - ' + report.label if report.label else ''}"
