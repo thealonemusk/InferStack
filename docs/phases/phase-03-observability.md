@@ -132,6 +132,12 @@ were compared on the same data. `tests/test_histograms.py` now pins it.
 | `scripts/verify_observability.py` | Prometheus and Grafana, actually started |
 | `.github/workflows/ci.yml` | lint, types, tests, the measurement, promtool |
 
+CI found a defect in itself on its first run: `ruff check` exited 2 on Python
+3.11 while passing on 3.12. Exit 2 is ruff failing to *run*, not ruff finding
+violations — `uv run` had re-resolved the environment against `uv.lock` instead
+of using the one the previous step installed, and produced one without ruff in
+it. Calling the venv's interpreter directly fixed it. All four jobs green.
+
 139 new tests (163 → **302**), `ruff` clean, `mypy` clean.
 
 The read path — parser, quantiles, engine selection, CLI — deliberately depends

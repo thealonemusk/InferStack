@@ -30,7 +30,7 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 | Tests | **302**, all passing (2 skip without `promtool`) |
 | Lint | `ruff check` and `ruff format --check` both clean (incl. bandit `S`, blind-except `BLE`) |
 | Types | `mypy` **clean**, 30 source files |
-| CI | `.github/workflows/ci.yml` — lint, types, tests on 3.11 + 3.12, the measurement script, promtool |
+| CI | `.github/workflows/ci.yml` — **green**. lint, types, tests on 3.11 + 3.12; the measurement script over real sockets; promtool over config and rules |
 | Phases done | 0, 1, 2, 3 — **all verified on real hardware** |
 | Phase next | **4 — benchmark harness (open-loop load)** |
 
@@ -403,6 +403,16 @@ Each cost a real debugging cycle. Re-learning them is pure waste.
     not the working directory. That is what lets one relative `rules/*.yml` be
     correct both in the container and under `promtool check config` in CI. An
     absolute container path makes that check match nothing and report success.
+
+24. **`uv run` re-resolves; it does not use the venv you just built.** CI built
+    an environment with `uv venv` + `uv pip install -e` and then called tools
+    through `uv run`, which treats the directory as a project and resolves
+    against `uv.lock` instead. On 3.11 that produced an environment with no
+    ruff in it, and `ruff check` exited **2** — ruff failing to *run*, which
+    reads exactly like a lint failure. 3.12 passed, so it looked
+    version-specific and was not. Call the venv's interpreter directly.
+25. **`setup-uv@v3` cache returns HTTP 400 on current runners.** Harmless
+    warning, but it makes every run look half-broken. v6 is current.
 
 **The meta-lesson, now hit four times** (Phase 1 flag drift, Phase 2 admission
 scope, Phase 2 logging, Phase 3 metric name): *code exercised only by mocks is
