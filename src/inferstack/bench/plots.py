@@ -124,6 +124,26 @@ def plot_goodput(report: SweepReport, path: Path, title: str | None = None) -> P
     )
     ax.fill_between(rates, goodput, completed, color=BAD, alpha=0.10, zorder=1)
 
+    # Name the shaded region. It is the entire argument of the chart - requests
+    # the server completed that arrived too late to be worth anything - and a
+    # reader should not have to infer it from a caption.
+    # Anchored at the last point rather than the widest: at the right-hand edge
+    # the goodput line has bottomed out, so the text sits in clear space instead
+    # of crossing the very curve it is describing.
+    if rates and completed[-1] - goodput[-1] > 0:
+        ax.annotate(
+            "completed, but too late to count",
+            xy=(rates[-1], (completed[-1] + goodput[-1]) / 2),
+            xytext=(-8, 0),
+            textcoords="offset points",
+            ha="right",
+            va="center",
+            fontsize=8,
+            color=BAD,
+            style="italic",
+            zorder=7,
+        )
+
     peak = report.peak_goodput
     if peak is not None:
         ax.plot(
