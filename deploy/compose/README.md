@@ -6,13 +6,19 @@ docker compose -f deploy/compose/docker-compose.yml up -d
 # Prometheus http://localhost:9090
 ```
 
-> **Not verified.** This stack has never been started. The development machine
-> has no Docker (see `CONTEXT.md`), so what is checked here is the *content* of
-> the configuration, not that the containers come up: a test asserts the
-> dashboard's queries reference only metric names this project emits or vLLM
-> documents, that the datasource uid the panels use is the one provisioned, and
-> that the scrape path matches `ObservabilityConfig.metrics_path`. That catches
-> a typo. It does not catch a provisioning mistake.
+> **Verified, but not through Docker.** The development machine has no Docker,
+> so `docker compose up` itself is still unexercised. Everything it would start
+> is not: `scripts/verify_observability.py` runs Prometheus 2.55.1 and Grafana
+> 11.3.1 directly against these exact files, with a real vLLM's exposition
+> replayed as the engine, and checks that every dashboard panel returns data,
+> every rule loads, and Grafana resolves the datasource and answers a query
+> through it. Last result — 11/11 panels, 13 rules, 0 errors — is in
+> `artifacts/curated/phase03/stack-verification.json`.
+>
+> What that leaves unchecked is this compose file specifically: image tags,
+> volume mounts and `host.docker.internal` resolution. The two paths it rewrites
+> for a local run are the datasource URL and the dashboards directory, and the
+> script refuses to run if either has changed here without it knowing.
 
 ## What it scrapes
 

@@ -94,6 +94,11 @@ under a batch of 8 — was measured on a real T4.
 
 ## What this does not show
 
+*The three caveats below were true when this was measured, on the morning of
+20 Sep 2026. Two were closed the same day and are kept as written, with what
+closed them noted underneath — a measurement's limitations are part of the
+record, not something to edit away once they stop applying.*
+
 - **No engine metrics were scraped.** Everything above is the gateway's own
   registry. `vllm:num_requests_running`, the KV-cache gauge and the TTFT
   histogram have never been read from a running vLLM; the parser and the
@@ -102,9 +107,19 @@ under a batch of 8 — was measured on a real T4.
   met a real exporter. In particular the `kv_cache_usage_perc` /
   `gpu_cache_usage_perc` name is handled as an alias precisely because it has
   not been confirmed against vLLM 0.29.0.
+
+  → **Closed** by the Kaggle run later that day
+  (`gateway-in-front-of-vllm.md`). The alias was right; the TPOT name next to
+  it was not, and had been silently missing.
 - **Prometheus and Grafana have never been started.** No Docker on this
   machine. The dashboard's queries are checked by a test against the metric
   names this project emits, which catches a typo and nothing else.
+
+  → **Closed** by `scripts/verify_observability.py`, which runs both binaries
+  directly: `stack-verification.json`. The typo-catching test did indeed catch
+  nothing — the TPOT panel was dead and it passed.
 - **No GPU, no model, no load generator.** One concurrency point, closed-loop,
   synthetic upstream. Phase 4 is where arrival rates and percentile curves
   arrive.
+
+  → **Still true**, and still Phase 4.
