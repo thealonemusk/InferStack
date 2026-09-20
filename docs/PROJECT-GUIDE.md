@@ -462,7 +462,7 @@ own registry at `/metrics`, and its admission counts are *collected from* the
 `AdmissionController` at scrape time rather than mirrored into gauges — a second
 copy is how the Phase 2 slot leak would have reported itself as healthy.
 Prometheus scrapes both components separately; the gateway never forwards the
-engine's metrics. [ADR-0007](../adr/0007-metrics-are-pulled-per-component.md).
+engine's metrics. [ADR-0007](adr/0007-metrics-are-pulled-per-component.md).
 
 Everything on the *reading* side depends only on the core packages, so
 `inferstack metrics --url http://host:8000` works in a GPU session that
