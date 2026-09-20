@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A self-hosted LLM inference stack: serving, gateway, observability and performance engineering."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 
 # Core dependencies are deliberately small and pure-Python so that `inferstack`
 # installs on Windows, in a slim container, and inside a Colab/Kaggle cell.
