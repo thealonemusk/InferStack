@@ -3,7 +3,7 @@
 A complete state snapshot. Written to be **pasted into a fresh session** (human
 or AI) so work can resume without re-deriving anything.
 
-**Last updated:** 19 Sep 2026, after Phase 2 completed.
+**Last updated:** 20 Sep 2026, after Phase 3 completed.
 
 ---
 
@@ -23,19 +23,21 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 
 | | |
 |---|---|
-| Active branch | `phase-02-gateway` (27 commits ahead of `main`) |
-| Also pushed | `phase-00-foundations` (2), `phase-01-baseline-serving` (19) |
+| Active branch | `phase-03-observability` (9 commits ahead of `phase-02-gateway`) |
+| Also pushed | `phase-00-foundations` (2), `phase-01-baseline-serving` (19), `phase-02-gateway` (27) |
 | `main` | still the initial commit — **nothing merged yet** |
-| Tests | **163**, all passing |
-| Lint | `ruff` clean (incl. bandit `S`, blind-except `BLE`) |
-| Phases done | 0, 1, 2 |
-| Phase next | **3 — observability (Prometheus + Grafana)** |
+| Tests | **271**, all passing |
+| Lint | `ruff check` and `ruff format --check` both clean (incl. bandit `S`, blind-except `BLE`) |
+| Types | `mypy` has **5 pre-existing errors** in launcher/probe/compat/app — none from Phase 3 |
+| Phases done | 0, 1, 2, 3 |
+| Phase next | **4 — benchmark harness (open-loop load)** |
 
-Everything is committed and pushed. Working tree clean.
+`phase-03-observability` is **not yet pushed** to GitHub.
 
-Branches stack: `phase-02-gateway` was branched from `phase-01-baseline-serving`,
-which was branched from `phase-00-foundations`. Nothing has been merged to
-`main`, by the user's choice — they want to review diffs first.
+Branches stack: each phase branch is cut from the previous one —
+`phase-03-observability` from `phase-02-gateway` from `phase-01-baseline-serving`
+from `phase-00-foundations`. Nothing has been merged to `main`, by the user's
+choice — they want to review diffs first.
 
 ### Working conventions agreed with the user — keep following these
 
@@ -131,6 +133,50 @@ A buffering proxy would have shown ~1000 ms TTFB. Headers verified:
 Caveat kept with the number: synthetic delay, no model, laptop. The meaningful
 figure is the comparison, not either row alone.
 
+### Phase 3 — the instrumentation is below the noise floor
+
+Same machine, same method, re-measured with `python scripts/measure_phase03.py`.
+Two gateways in front of one fake upstream, differing only in
+`observability.metrics_enabled`. Artifacts: `artifacts/curated/phase03/`.
+
+| Path | TTFB (median of 5) | Total |
+|---|---|---|
+| Direct to upstream | 5.5 ms | 1017 ms |
+| **Gateway, metrics on** | **13.3 ms** | 1033 ms |
+| Gateway, metrics off | 13.0 ms | 1029 ms |
+
+300 sequential non-streaming requests, which is the only row that can resolve a
+sub-millisecond cost:
+
+| Path | p50 | p95 |
+|---|---|---|
+| Direct to upstream | 7.22 ms | 9.60 ms |
+| **Gateway, metrics on** | **16.02 ms** | 20.02 ms |
+| Gateway, metrics off | 17.04 ms | 24.97 ms |
+
+**Metrics-on measured 1.0 ms FASTER than metrics-off.** Do not repeat this as
+"metrics make it faster" or round it to "free". Instrumentation cannot make a
+server faster, so the result establishes the *resolution* of the method — about
+±1 ms here — and the honest claim is "the cost is below what this measurement
+can see". The gateway hop itself is resolvable: 8.8 ms p50 on loopback against a
+handler doing no work, which is under 1% of a real engine's 0.95 s.
+
+Scrape cost: 9,026 bytes, 67 series, 8.9 ms p50 (≈7 ms of which is the loopback
+round trip). Under 0.1% duty cycle at a 5 s interval. Note 67 series is more
+than the gateway has metrics — `prometheus_client` emits a `_created` series per
+counter and histogram, roughly a third of the payload, unused.
+
+8 concurrent streams, scraped mid-flight: `inferstack_gateway_in_flight_requests`
+read **8**, and **0** once the last chunk was relayed. That is the Phase 2
+admission bug made observable from outside the process.
+
+**What Phase 3 did NOT measure — this is the important part.** No engine metrics
+have ever been scraped from a running vLLM. The parser, the aliases and the
+selection rules are tested against `tests/fixtures/vllm_metrics.txt`, which is
+hand-written from vLLM's documented names and says so in its header. Prometheus
+and Grafana have never been started (no Docker on this machine). The gateway has
+still never fronted a real engine.
+
 ---
 
 ## 5. Repository map
@@ -142,7 +188,7 @@ src/inferstack/
   probe.py                 hardware detect -> named capabilities
   compat.py                profile vs hardware validation (error/warning/info)
   cli.py                   doctor, profiles, config show, serve, smoke,
-                           gateway, version
+                           gateway, metrics, version
   logging.py               structlog, console locally / JSON in containers
   engine/
     launcher.py            EngineConfig -> vLLM argv; process supervision;
@@ -153,21 +199,30 @@ src/inferstack/
     errors.py              OpenAI-shaped error envelopes
     auth.py                constant-time API-key verification
     limits.py              AdmissionController: bounded concurrency, shed
-    middleware.py          request ids + structured access logs
+    middleware.py          request ids, access logs, request metrics
     proxy.py               streaming pass-through; upstream cancellation
-    app.py                 routes, wiring, /health and /ready
+    app.py                 routes, wiring, /health, /ready, /metrics
+  observability/           PHASE 3 - complete
+    promtext.py            Prometheus text exposition parser (core deps only)
+    histograms.py          quantiles from bucket counts, Prometheus-compatible
+    engine.py              vLLM's signals -> typed snapshot; name aliases
+    metrics.py             the gateway's registry (needs prometheus_client)
   remote/
     kaggle.py              push/poll/fetch kernels; downgrade detection
     kernels/gpu_probe.py     hardware probe, runs ON the GPU
     kernels/serve_smoke.py   full Phase 1 run, unattended
   bench/                   EMPTY - Phase 4
-artifacts/curated/         phase01/, phase02/ - measured results, committed
+deploy/compose/            docker-compose, prometheus.yml, grafana
+                           provisioning + dashboard JSON. NEVER STARTED.
+scripts/measure_phase03.py the Phase 3 measurement, reproducible
+artifacts/curated/         phase01/, phase02/, phase03/ - committed results
 CONTEXT.md                 this file
-docs/PROJECT-GUIDE.md      theory, architecture, defence (894 lines)
+docs/PROJECT-GUIDE.md      theory, architecture, defence (1018 lines)
 docs/INTEGRATION.md        how to plug into an existing workflow
-docs/adr/                  ADR-0001..0006
-docs/phases/               phase-00, phase-01, phase-02 records
-tests/                     163 tests
+docs/adr/                  ADR-0001..0007
+docs/phases/               phase-00 .. phase-03 records
+tests/                     271 tests
+  fixtures/vllm_metrics.txt  SYNTHETIC vLLM exposition - not a capture
 ```
 
 ---
@@ -188,6 +243,16 @@ tests/                     163 tests
 - **ADR-0006** — the **gateway is a pass-through**, not a translation layer.
   Bodies forwarded unmodified; declaring a schema here would be a second copy of
   vLLM's fast-moving surface, and it is the copy that would be wrong.
+- **ADR-0007** — **metrics are pulled per component, and reported as
+  distributions.** Prometheus scrapes the gateway and the engine separately; the
+  gateway never forwards the engine's metrics (a proxied scrape makes the
+  gateway a single point of failure for observability and misattributes
+  staleness). Latency is always a histogram, with gateway buckets matching
+  vLLM's TTFT boundaries so the two compare bucket for bucket. Admission counts
+  are *collected from* `AdmissionController` at scrape time, never mirrored into
+  gauges. `/metrics` carries no credential and no label ever carries a prompt,
+  a key or a raw path. Where nothing can scrape the engine, the CLI samples it
+  from inside the session to JSONL.
 
 Standing rules:
 
@@ -238,10 +303,38 @@ Each cost a real debugging cycle. Re-learning them is pure waste.
     encode. Render kernel logs to UTF-8 files, never straight to stdout.
 12. **Silent `str.replace` no-ops.** Patching files with `str.replace` fails
     silently when formatting changed. Assert the pattern matched.
+13. **`httpx.ASGITransport` buffers the whole response body.** Any test that
+    reads a chunk and then acts on the server before the stream ends will
+    deadlock: the transport waits for the full body, the body waits for the
+    test. Drive the ASGI app directly (`app(scope, receive, send)` with your own
+    queue) or use a real socket. Same limitation that forced Phase 2 to measure
+    pass-through over uvicorn.
+14. **`prometheus_client`'s default `REGISTRY` is process-global.** Registering
+    the same metric name twice raises `Duplicated timeseries`, so building a
+    gateway twice in one process — two tests, `uvicorn --reload`, a mounted
+    sub-app — fails at construction. Every `GatewayMetrics` owns its registry.
+15. **A labelled metric has no samples until a label set is observed.** Reading
+    exposed names off a fresh registry therefore misses
+    `inferstack_gateway_requests_total` entirely. Derive names from each
+    family's declared `type` instead. This bit the dashboard-query test on its
+    first run.
+16. **`json.dumps(float('inf'))` emits bare `Infinity`.** Python round-trips it;
+    the JSON spec does not allow it and other tools reject the file. Histogram
+    bucket bounds serialise as the string `"+Inf"`.
+17. **Constructing an `httpx.AsyncClient` loads a TLS trust store — 0.9 s on
+    this machine.** `inferstack metrics --duration 0.6` returned exactly one
+    sample because the deadline was set before the client existed. Start a
+    measurement window *after* the setup it does not intend to measure.
+18. **The first sample of anything measures the ordering.** Timing each
+    streaming path once, in sequence, made direct-to-upstream look slower than
+    the path through the gateway — 39 ms versus 5.5 ms once warmed. Warm up,
+    then take a median.
 
 **The meta-lesson, now hit three times** (Phase 1 flag drift, Phase 2 admission
 scope, Phase 2 logging): *code exercised only by mocks is not exercised.* Get to
-a real integration run early in each phase.
+a real integration run early in each phase. **Phase 3 did not follow it** — the
+engine-side metrics code has still only met a synthetic fixture, and that is the
+weakest part of the project right now.
 
 ---
 
@@ -257,11 +350,26 @@ inferstack config show -p kaggle-2xt4
 inferstack serve --dry-run            # print exact vLLM argv, launch nothing
 inferstack smoke -c 8                 # batching proof; exits 1 if serialised
 inferstack gateway                    # the OpenAI-compatible edge
+inferstack metrics                    # engine load + latency percentiles
 
 # measure a third-party endpoint (no GPU needed)
-inferstack smoke --base-url http://host:8000/v1 --model their-model
+inferstack smoke   --base-url http://host:8000/v1 --model their-model
+inferstack metrics --url      http://host:8000
 
-pytest -p no:warnings && ruff check .
+# sample an engine nothing can scrape (writes one JSON object per line)
+inferstack metrics --url http://127.0.0.1:8000   --duration 60 --interval 0.2 --out artifacts/runs/load.jsonl
+
+pytest -p no:warnings && ruff check . && ruff format --check src tests
+python scripts/measure_phase03.py     # reproduces the Phase 3 artifact
+```
+
+Prometheus + Grafana (**never started on this machine — no Docker**):
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml up -d
+# Grafana http://localhost:3000, Prometheus http://localhost:9090
+# Scrape targets are host.docker.internal:8080 (gateway) and :8000 (engine);
+# edit deploy/compose/prometheus/prometheus.yml for anything real.
 ```
 
 Gateway with auth:
@@ -300,43 +408,81 @@ running it from a later branch.**
 
 ## 9. What is NOT built
 
-- **No rate limiting per key.** Admission control is global. Phase 7.
-- **No Prometheus/Grafana wiring.** vLLM's `/metrics` exists, unused; the
-  gateway's `AdmissionController.stats()` is only exposed on `/ready`. Phase 3.
-- **No multi-replica routing.** One upstream per gateway. Phase 7.
-- **One concurrency point measured (8).** No percentile curves, no controlled
-  arrival rates, no open-loop load. Phase 4.
+- **No engine metrics have ever been scraped from a real vLLM.** Phase 3's
+  parser, name aliases and selection rules are tested only against a
+  hand-written fixture. This is the top of the list on purpose.
 - **The gateway has never fronted a real vLLM.** Measured only against a fake
-  upstream. Wiring it to the engine on a GPU session is a Phase 3 task.
+  upstream. This was listed as a Phase 3 task and did not happen; it needs a
+  GPU session and is the first thing worth doing.
+- **Prometheus and Grafana have never been started.** No Docker here. A test
+  checks the dashboard's queries name metrics that exist and that the panels'
+  datasource uid is the provisioned one — that catches a typo, nothing more.
+- **One concurrency point measured (8).** No percentile curves, no controlled
+  arrival rates, no open-loop load, no goodput. Phase 4.
+- **No alerting rules.** Prometheus is configured to scrape, not to page.
+- **No tracing.** Request ids reach the logs; nothing correlates a request
+  across the gateway and the engine.
+- **No rate limiting per key.** Admission control is global. Phase 7.
+- **No multi-replica routing.** One upstream per gateway. Phase 7.
 - **`local-cpu` has never run a real vLLM.** Needs a Linux container.
 - **Tensor parallelism untested.** Two T4s available; `colab-t4` uses one.
   Phase 6. Expect sub-linear scaling — PCIe, not NVLink.
 - **No CI workflow.**
+- **The gateway's histogram buckets are coupled to vLLM's defaults**, chosen so
+  the two compare directly. A vLLM release that changes its own boundaries would
+  end that comparability silently.
 
 ---
 
-## 10. Next step — Phase 3, observability
+## 10. Next step
 
-Branch `phase-03-observability` from `phase-02-gateway`.
+### 10a. First, close Phase 3 on real hardware
 
-Goal: the four signals that actually explain latency — **queue depth, running
-batch size, KV-cache utilisation, preemption count** — plus TTFT/TPOT
-histograms.
+This is a leftover, not a new phase, and it should happen before Phase 4 starts
+generating load against something nobody has instrumented.
+
+Run the gateway in front of a real vLLM on a Kaggle session and scrape both.
+The existing kernel `src/inferstack/remote/kernels/serve_smoke.py` already
+installs InferStack from the branch, starts the engine and runs the smoke
+check; it needs to also start `inferstack gateway`, drive the smoke through the
+gateway instead of the engine directly, and sample both `/metrics` endpoints
+with `inferstack metrics --duration ... --out ...` so the run leaves the signals
+behind as an artifact.
+
+Two things to confirm while doing it, because both are currently guesses:
+
+1. **Which cache metric name vLLM 0.29.0 actually emits** —
+   `vllm:kv_cache_usage_perc` (V1) or `vllm:gpu_cache_usage_perc` (V0).
+   `observability/engine.py` accepts both precisely because this is unverified.
+2. **Whether the engine labels its series** with `model_name`, `engine`, or
+   both. A signal with more than one label set raises `AmbiguousSignalError` by
+   design, so a data-parallel session would need `--label engine=0`.
+
+Note `serve_smoke.py` pins `INFERSTACK_BRANCH`, still defaulting to
+`phase-01-baseline-serving`. **Update that default, or set the env var**, before
+running it from this branch.
+
+### 10b. Then Phase 4 — the benchmark harness
+
+Branch `phase-04-bench` from `phase-03-observability`.
+
+Goal: honest load. The sin to avoid is **coordinated omission** — a closed-loop
+generator sends *fewer* requests when the server slows down, so the load adapts
+to the server's distress and the measurement hides the problem it was built to
+find. `inferstack smoke` is closed-loop, which is exactly why it is labelled a
+sanity check and not a benchmark.
 
 Concretely:
 
-- Scrape vLLM's own Prometheus metrics: `vllm:num_requests_running`,
-  `vllm:num_requests_waiting`, `vllm:gpu_cache_usage_perc`,
-  `vllm:num_preemptions_total`, `vllm:time_to_first_token_seconds`,
-  `vllm:time_per_output_token_seconds`.
-- Expose gateway metrics from `AdmissionController.stats()` — in-flight,
-  waiting, admitted, rejected — on a `/metrics` endpoint. `prometheus-client`
-  is already in the `gateway` extra.
-- Prometheus + Grafana via docker-compose under `deploy/`.
-- **Histograms, not averages.** Latency is heavy-tailed; a mean TTFT of 200 ms
-  is compatible with a p99 of 8 s, and percentiles cannot be recovered by
-  averaging percentiles across scrape intervals.
-- This is also the phase to finally run the gateway in front of a real vLLM on
-  a GPU session, since that is when the metrics become worth collecting.
+- Open-loop arrivals at a fixed rate λ, with Poisson-distributed inter-arrival
+  times (memoryless is the right model for independent users).
+- A *curve*: latency versus arrival rate, not a single number. Plus **goodput**
+  under a stated SLO — throughput counting only requests that met their target,
+  which is the metric that separates engineering from benchmark-running.
+- Record a Phase 3 metrics snapshot alongside every run. A latency curve without
+  queue depth and KV-cache utilisation beside it cannot be explained, only
+  plotted. `inferstack metrics --duration --interval --out` already does this.
+- `bench/` is empty and `numpy`/`pandas`/`matplotlib`/`transformers` are already
+  in the `bench` extra.
 
-The reasoning for all of this is written up in `docs/PROJECT-GUIDE.md` §5.2.
+The reasoning is written up in `docs/PROJECT-GUIDE.md` §5.3.
