@@ -48,7 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover - the engine is only imported once install
     from inferstack.engine.launcher import EngineProcess
 
 REPO = "https://github.com/thealonemusk/InferStack"
-BRANCH = os.environ.get("INFERSTACK_BRANCH", "phase-03-observability")
+BRANCH = os.environ.get("INFERSTACK_BRANCH", "phase-04-bench")
 PROFILE = os.environ.get("INFERSTACK_PROFILE", "colab-t4")
 CONCURRENCY = int(os.environ.get("INFERSTACK_CONCURRENCY", "8"))
 MAX_TOKENS = int(os.environ.get("INFERSTACK_MAX_TOKENS", "64"))

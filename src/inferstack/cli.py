@@ -13,6 +13,7 @@ The commands, in the order a session tends to use them:
     inferstack smoke               prove continuous batching is working
     inferstack gateway             run the OpenAI-compatible edge
     inferstack metrics             read the engine's Prometheus signals
+    inferstack bench               map the latency/throughput curve
 """
 
 from __future__ import annotations
@@ -30,6 +31,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from inferstack.bench.load import Workload
+from inferstack.bench.report import ServiceLevel, StepSummary, SweepReport
+from inferstack.bench.sweep import SweepConfig, run_sweep
 from inferstack.compat import Issue, check_profile, worst_severity
 from inferstack.config import Settings, available_profiles, load_settings, resolve_profile
 from inferstack.engine.launcher import (
@@ -880,6 +884,198 @@ def metrics(
             f"It answered with {snapshot.sample_count} sample(s), none of them recognised - "
             "so this is probably not an inference engine's metrics endpoint."
         )
+        raise typer.Exit(1)
+
+
+def _render_sweep(report: SweepReport) -> None:
+    """The curve as a table, with the shape called out underneath it."""
+    table = Table(box=None, padding=(0, 2, 0, 0))
+    table.add_column("offered", justify="right")
+    table.add_column("done", justify="right")
+    table.add_column("goodput", justify="right")
+    table.add_column("tok/s", justify="right")
+    table.add_column("TTFT p50", justify="right")
+    table.add_column("TTFT p99", justify="right")
+    table.add_column("TPOT p99", justify="right")
+    table.add_column("queue", justify="right")
+    table.add_column("KV", justify="right")
+    table.add_column("", justify="left")
+
+    for step in report.ordered:
+        peak = step.engine.get("peak", {})
+        queue = peak.get("waiting")
+        cache = peak.get("kv_cache_usage")
+        mark = "[green]ok[/green]" if step.healthy else "[red]SLO miss[/red]"
+        if step.healthy and not step.keeping_up:
+            mark = "[yellow]behind[/yellow]"
+        table.add_row(
+            f"{step.offered_rate_per_s:.1f}/s",
+            f"{step.completed_rate_per_s:.1f}/s",
+            f"[bold]{step.goodput_per_s:.1f}/s[/bold]",
+            f"{step.output_tokens_per_s:.0f}",
+            _fmt_seconds(step.ttft_p50_s),
+            _fmt_seconds(step.ttft_p99_s),
+            _fmt_seconds(step.tpot_p99_s),
+            "-" if queue is None else f"{queue:.0f}",
+            "-" if cache is None else f"{cache * 100:.0f}%",
+            mark,
+        )
+
+    console.print(Panel(table, title="Sweep", title_align="left", border_style="blue"))
+
+    if not report.generator_kept_up:
+        err_console.print(
+            "[bold red]These numbers describe the load generator, not the server.[/bold red] "
+            f"It fell up to {max(s.max_schedule_lag_s for s in report.steps):.2f}s behind its "
+            "own schedule, so the offered load was never actually offered. Reduce the top "
+            "rate, or run the generator somewhere with more headroom."
+        )
+        return
+
+    summary = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    summary.add_column(style="dim")
+    summary.add_column(justify="right")
+    sustainable = report.max_sustainable_rate_per_s
+    summary.add_row(
+        f"Sustains within the {report.slo.name} SLO",
+        "[bold red]nothing[/bold red]"
+        if sustainable is None
+        else f"[bold green]{sustainable:.1f} req/s[/bold green]",
+    )
+    if peak := report.peak_goodput:
+        summary.add_row("Peak goodput", f"{peak.goodput_per_s:.1f} req/s")
+        summary.add_row("  at offered rate", f"{peak.offered_rate_per_s:.1f} req/s")
+    if throughput := report.peak_throughput:
+        summary.add_row("Peak output throughput", f"{throughput.output_tokens_per_s:.0f} tok/s")
+    summary.add_row("SLO", f"TTFT < {report.slo.ttft_s:g}s, TPOT < {report.slo.tpot_s:g}s")
+    summary.add_row("Generator kept up", "[green]yes[/green]")
+    console.print(Panel(summary, title="Verdict", title_align="left", border_style="green"))
+    console.print(f"[dim]{report.verdict()}[/dim]")
+
+
+@app.command()
+def bench(
+    profile: Annotated[str | None, typer.Option("--profile", "-p")] = None,
+    base_url: Annotated[
+        str | None, typer.Option("--base-url", help="Endpoint to load, e.g. http://host:8000/v1")
+    ] = None,
+    model: Annotated[str | None, typer.Option("--model", "-m")] = None,
+    api_key: Annotated[str | None, typer.Option("--api-key", envvar="INFERSTACK_API_KEY")] = None,
+    rates: Annotated[
+        str, typer.Option("--rates", help="Comma-separated arrival rates, requests/s.")
+    ] = "1,2,4,8,12,16",
+    duration: Annotated[
+        float, typer.Option("--duration", help="Seconds of load at each rate.")
+    ] = 30.0,
+    prompt_tokens: Annotated[int, typer.Option("--prompt-tokens")] = 128,
+    max_tokens: Annotated[int, typer.Option("--max-tokens", "-n")] = 128,
+    ttft_slo: Annotated[
+        float,
+        typer.Option("--ttft-slo", help="Seconds. A request slower than this is not goodput."),
+    ] = 1.0,
+    tpot_slo: Annotated[float, typer.Option("--tpot-slo", help="Seconds per output token.")] = 0.05,
+    seed: Annotated[int, typer.Option("--seed")] = 1337,
+    metrics_url: Annotated[
+        str | None,
+        typer.Option("--metrics-url", help="Engine /metrics, so the curve can be explained."),
+    ] = None,
+    no_metrics: Annotated[
+        bool, typer.Option("--no-metrics", help="Do not scrape the engine during the sweep.")
+    ] = False,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Directory for records and report.")
+    ] = None,
+    plot: Annotated[bool, typer.Option("--plot", help="Write charts next to the report.")] = False,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Map the latency/throughput curve with open-loop load.
+
+    Requests arrive on a Poisson schedule computed *before* the run, so the
+    offered load does not adapt to how the server is coping. That is the whole
+    difference between this and `inferstack smoke`: a closed-loop generator
+    sends fewer requests when the server slows down, which hides the problem it
+    was built to find.
+
+        inferstack bench --base-url http://host:8000/v1 --model m --rates 2,4,8,16
+
+    Reports goodput - throughput counting only requests that met the SLO -
+    because raw throughput can always be raised by batching harder, right up
+    until nobody is being served in time.
+    """
+    settings = _load_or_exit(profile)
+    url = base_url or settings.engine.base_url
+    target_model = model or settings.engine.model_id
+
+    try:
+        rate_values = sorted({float(r) for r in rates.split(",") if r.strip()})
+    except ValueError as exc:
+        err_console.print(f"[bold red]--rates must be numbers: {rates!r}[/bold red]")
+        raise typer.Exit(2) from exc
+    if not rate_values:
+        err_console.print("[bold red]--rates is empty[/bold red]")
+        raise typer.Exit(2)
+
+    scrape = None if no_metrics else (metrics_url or url)
+    destination = out or (settings.bench.artifacts_dir / f"sweep-{int(time.time())}")
+
+    config = SweepConfig(
+        rates=rate_values,
+        duration_s=duration,
+        workload=Workload(approx_prompt_tokens=prompt_tokens, max_tokens=max_tokens),
+        slo=ServiceLevel(ttft_s=ttft_slo, tpot_s=tpot_slo),
+        seed=seed,
+        metrics_url=scrape,
+        records_dir=destination / "records",
+    )
+
+    body = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    body.add_column(style="dim")
+    body.add_column()
+    body.add_row("Endpoint", url)
+    body.add_row("Model", target_model)
+    body.add_row("Rates", ", ".join(f"{r:g}" for r in rate_values) + " req/s")
+    body.add_row("Duration each", f"{duration:g}s")
+    body.add_row("Workload", f"~{prompt_tokens} prompt -> {max_tokens} output tokens")
+    body.add_row("SLO", f"TTFT < {ttft_slo:g}s, TPOT < {tpot_slo:g}s")
+    body.add_row("Engine metrics", scrape or "[yellow]not scraped[/yellow]")
+    console.print(Panel(body, title="Open-loop sweep", title_align="left", border_style="blue"))
+
+    def announce(step: StepSummary) -> None:
+        state = "ok" if step.healthy else "SLO miss"
+        console.print(
+            f"[dim]{step.offered_rate_per_s:5.1f}/s -> "
+            f"goodput {step.goodput_per_s:5.1f}/s  "
+            f"TTFT p99 {_fmt_seconds(step.ttft_p99_s):>9}  {state}[/dim]"
+        )
+
+    report, _results = asyncio.run(
+        run_sweep(url, target_model, config, api_key=api_key, on_step=announce)
+    )
+
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "sweep.json").write_text(
+        json.dumps(report.to_dict(), indent=2), encoding="utf-8"
+    )
+
+    if as_json:
+        console.print_json(json.dumps(report.to_dict()))
+    else:
+        _render_sweep(report)
+
+    if plot:
+        try:
+            from inferstack.bench.plots import plot_goodput, plot_sweep
+
+            console.print(f"[dim]{plot_goodput(report, destination / 'goodput.png')}[/dim]")
+            console.print(f"[dim]{plot_sweep(report, destination / 'sweep.png')}[/dim]")
+        except ImportError as exc:
+            err_console.print(f"[yellow]{exc}[/yellow]")
+
+    console.print(f"[dim]report and per-request records in {destination}[/dim]")
+
+    # A sweep the generator could not keep up with is not a measurement of the
+    # server, so it must not exit 0 and be mistaken for one.
+    if not report.generator_kept_up:
         raise typer.Exit(1)
 
 
