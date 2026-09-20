@@ -516,6 +516,16 @@ before believing a flat line.
 
 ### 5.4 Phase 5 — the two knobs, and Little's Law
 
+**Phase 4 already picked the knob.** The curve measured on a T4 shows the
+running batch growing 4 → 100 while queue depth stays at zero and the KV cache
+never passes 2.9%. With `max_num_seqs=256` the scheduler admits nearly
+everything rather than queueing it, so past ~65 concurrent sequences the GPU
+cannot drive the batch and every request degrades together — goodput collapses
+69% between 16.5 and 24 req/s while throughput *rises*. Lowering the cap should
+trade a little peak throughput for a materially higher sustainable rate, by
+making the engine queue instead of degrading everyone. That is a hypothesis with
+a measurement behind it rather than a guess.
+
 - `max_num_seqs` — the ceiling on sequences in the running batch
 - `max_num_batched_tokens` — the token budget for a single engine step, which
   with chunked prefill governs how much prefill work competes with decode
@@ -675,9 +685,26 @@ Prometheus 2.55.1 and Grafana 11.3.1 have been started against the committed
 configuration: 11/11 dashboard panels returning data, 13 rules loaded with none
 in error, the datasource resolved by uid and a query answered through Grafana.
 
-**Still not done, and say so:** only one concurrency point has been measured, so
-there are still no percentile curves and no goodput — that is Phase 4, and
-`smoke` is labelled a sanity check precisely because it is closed-loop. The
+### Phase 4 — the curve
+
+**16.5 req/s** within TTFT < 1 s and TPOT < 50 ms, on one T4. Open-loop Poisson
+arrivals, 128 in and 128 out, eight rates. Peak goodput 13.54 req/s.
+
+The number to lead with is the comparison: pushing from 16.5 to 24 req/s raised
+output throughput 7.7% (1,732 → 1,865 tok/s) and cut goodput 69% (13.54 → 4.25
+req/s), with p50 TTFT going from 120 ms to 5.08 s. A throughput-only benchmark
+calls the second one the better result.
+
+**Volunteer what it corrected.** Queue depth stayed at zero through that
+collapse and the KV cache peaked at 2.9%; what moved was the running batch,
+4 → 100. §5.2 of this guide called queue depth the leading indicator, and on
+this workload it is not — `max_num_seqs=256` means the scheduler admits rather
+than queues. The binding constraint is compute, Phase 1's 78.84× headroom is
+unreachable at this shape, and the fix is a knob, which is Phase 5.
+
+**Still not done, and say so:** nothing has been tuned — the curve describes the
+`colab-t4` profile exactly as Phase 1 left it. One workload, one run per rate,
+so no error bars. The
 Phase 1 and Phase 3 numbers are unpaired. Tensor parallelism is untested; two
 T4s were attached and `colab-t4` uses one. `local-cpu` has still never run a
 real vLLM, and will not without a source build — vLLM ships CUDA-only Linux

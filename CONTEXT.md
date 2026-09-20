@@ -3,7 +3,7 @@
 A complete state snapshot. Written to be **pasted into a fresh session** (human
 or AI) so work can resume without re-deriving anything.
 
-**Last updated:** 20 Sep 2026, after Phase 3 completed **and was verified on a T4**.
+**Last updated:** 20 Sep 2026, after Phase 4 — the latency/throughput curve, measured on a T4.
 
 ---
 
@@ -218,6 +218,43 @@ capture replayed as the engine. `artifacts/curated/phase03/stack-verification.js
   `observability/histograms.py`, over the same captured bytes, return the same
   p99s to floating-point noise (2.350000000000001 / 0.024850000000000004 /
   0.02484973821989529). Pinned in `tests/test_histograms.py`.
+
+### Phase 4 — the curve: 16.5 req/s within an interactive SLO
+
+Kaggle T4, vLLM 0.29.0, Qwen2.5-1.5B fp16. Open-loop Poisson arrivals, eight
+rates, 30 s each, 128 prompt tokens and **exactly** 128 output tokens
+(`ignore_eos`). Artifacts: `artifacts/curated/phase04/`, including every
+per-request record.
+
+| offered | completed | goodput | tok/s | TTFT p50 | TTFT p99 | batch | queue | KV |
+|---|---|---|---|---|---|---|---|---|
+| 0.86/s | 0.79/s | 0.79/s | 101 | 50 ms | 58 ms | 4 | 0 | 0.1% |
+| 3.99/s | 3.49/s | 3.49/s | 446 | 57 ms | 70 ms | 17 | 0 | 0.5% |
+| 8.25/s | 7.04/s | 7.04/s | 901 | 78 ms | 97 ms | 36 | 0 | 1.0% |
+| 12.47/s | 10.40/s | 10.40/s | 1,332 | 95 ms | 125 ms | 65 | 0 | 1.7% |
+| **16.47/s** | **13.54/s** | **13.54/s** | **1,732** | **120 ms** | **593 ms** | **99** | **0** | **2.7%** |
+| 24.08/s | 14.57/s | **4.25/s** | 1,865 | **5.08 s** | **9.80 s** | 100 | 0 | 2.9% |
+
+**Headline:** sustains **16.47 req/s** within TTFT < 1 s and TPOT < 50 ms; peak
+goodput **13.54 req/s**. Generator lag never exceeded 40 ms (threshold 250 ms),
+so these describe the engine.
+
+**How to present it.** Quote the last two rows together: +7.7% throughput,
+−69% goodput, p50 TTFT 120 ms → 5.08 s. A throughput-only benchmark calls
+1,865 tok/s the best result in the run; it is the worst.
+
+**What it corrected about this project — volunteer this.** Queue depth was
+**zero at every rate**, including at five-second TTFT, and KV cache peaked at
+**2.9%**. What moved was the running batch, 4 → 100. Phase 3 called
+`num_requests_waiting` "the leading indicator of latency pain"; on this workload
+it is not, because `max_num_seqs=256` lets the scheduler admit everything into
+an ever-larger batch instead of queueing. So:
+
+- the binding constraint is **compute**, not KV cache and not the queue
+- Phase 1's 78.84× headroom is unreachable at this shape — sizing from it
+  over-provisions ~4×
+- `max_num_seqs=256` is wrong for an interactive SLO here → **Phase 5's
+  hypothesis, from a measurement rather than a guess**
 
 ---
 
@@ -477,6 +514,12 @@ inferstack metrics                    # engine load + latency percentiles
 inferstack smoke   --base-url http://host:8000/v1 --model their-model
 inferstack metrics --url      http://host:8000
 
+# map the latency/throughput curve against any OpenAI-compatible server
+inferstack bench --base-url http://host:8000/v1 --model m   --rates 2,4,8,12,16,24 --duration 30 --ttft-slo 1.0 --tpot-slo 0.05 --plot
+
+# re-judge a finished sweep under a different SLO, no GPU needed
+inferstack analyse artifacts/curated/phase04/records --ttft-slo 5 --name batch
+
 # sample an engine nothing can scrape (writes one JSON object per line)
 inferstack metrics --url http://127.0.0.1:8000   --duration 60 --interval 0.2 --out artifacts/runs/load.jsonl
 
@@ -496,6 +539,10 @@ docker compose -f deploy/compose/docker-compose.yml up -d
 python scripts/verify_observability.py   --prometheus <dir>/prometheus.exe   --grafana <dir>/grafana-v11.3.1   --engine-metrics tests/fixtures/vllm_metrics_real.txt
 # -> 11/11 panels with data, 13 rules, grafana dashboard provisioned
 ```
+
+**Run the Phase 4 sweep on a GPU session** (~40 min - the overload steps drain
+slowly). Same shape as below, with `bench_sweep.py` and kernel id
+`inferstack-phase04-bench`.
 
 **Run the Phase 3 stack on a GPU session** (~9 min). Push the branch first — the
 kernel installs `inferstack[gateway]` from it:
@@ -559,9 +606,12 @@ lumping them together overstates what is missing.
 
 **Later phases, by design:**
 
-- **One concurrency point measured (8), closed-loop.** No percentile curves, no
-  controlled arrival rates, no open-loop load, no goodput. Phase 4, and `smoke`
-  is labelled a sanity check precisely because of this.
+- **Nothing is tuned.** Phase 4 mapped the curve for the `colab-t4` profile
+  exactly as Phase 1 left it. No knob has been swept, and the curve says which
+  one to sweep first: `max_num_seqs=256`. Phase 5.
+- **One workload, one run per rate.** 128 in, 128 out, greedy, no repeats and
+  therefore no error bars. Longer outputs shift the balance toward decode and
+  would move every number in the curve.
 - **Tensor parallelism untested.** Two T4s were attached to the Phase 3 run;
   `colab-t4` uses one. Phase 6. Expect sub-linear scaling — PCIe, not NVLink.
 - **No rate limiting per key.** Admission control is global. Phase 7.
@@ -593,46 +643,70 @@ lumping them together overstates what is missing.
   each. The 7 ms gateway TTFT cost is quotable because an independent laptop
   measurement agrees with it, not because one sample either side establishes it.
 - **Alert thresholds are placeholders**, and say so in their own description
-  text with a test that keeps them saying it. They belong to the Phase 4 curve.
+  text with a test that keeps them saying it. The Phase 4 curve can now set
+  them: TTFT p99 crosses 1 s between 16.5 and 24 req/s on this configuration.
+- **The load generator tops out around 40 req/s on the dev laptop.** Past that
+  it reports the sweep invalid and exits non-zero rather than publishing its own
+  limits as the server's. Measured in
+  `artifacts/curated/phase04/generator-ceiling.md`.
+- **Queue depth is not always the leading indicator**, whatever ADR-0007 and the
+  Phase 3 docs imply. It is, when `max_num_seqs` is smaller than the batch the
+  GPU can drive. On `colab-t4` it is far larger, so pressure shows up as batch
+  size instead and the queue stays at zero through a goodput collapse.
 
 ---
 
-## 10. Next step — Phase 4, the benchmark harness
+## 10. Next step — Phase 5, tuning, with a hypothesis already in hand
 
-Branch `phase-04-bench` from `phase-03-observability`. Nothing is owed from
-Phase 3 first.
+Branch `phase-05-tuning` from `phase-04-bench`. Nothing is owed from Phase 4.
 
-Goal: honest load. The sin to avoid is **coordinated omission** — a closed-loop
-generator sends *fewer* requests when the server slows down, so the load adapts
-to the server's distress and the measurement hides the problem it was built to
-find. `inferstack smoke` is closed-loop, which is exactly why it is labelled a
-sanity check and not a benchmark.
+Phase 5 is normally the phase where you guess at knobs. It is not, here: the
+Phase 4 curve already says which knob and which direction.
+
+**The hypothesis.** `max_num_seqs=256` lets vLLM's scheduler admit almost
+everything straight into the running batch. Measured, the batch grew 4 → 100
+while queue depth stayed at **zero** and KV cache never passed **2.9%**. Past
+about 65 concurrent sequences the T4 cannot drive the batch fast enough, so
+every request in it degrades together — which is why goodput collapses from
+13.54 to 4.25 req/s between 16.5 and 24 req/s while throughput *rises*.
+
+Lowering `max_num_seqs` should make the engine **queue** instead of degrading
+everyone: a smaller batch runs faster per step, requests beyond the cap wait
+rather than joining and slowing the rest, and the tail stops dragging the head
+down. Expect a little less peak throughput and a materially higher sustainable
+rate. If that is wrong, the curve will say so, which is the point.
 
 Concretely:
 
-- Open-loop arrivals at a fixed rate λ, with Poisson-distributed inter-arrival
-  times (memoryless is the right model for independent users).
-- A *curve*: latency versus arrival rate, not a single number. Plus **goodput**
-  under a stated SLO — throughput counting only requests that met their target,
-  which is the metric that separates engineering from benchmark-running.
-- Record a Phase 3 metrics snapshot alongside every run. A latency curve without
-  queue depth and KV-cache utilisation beside it cannot be explained, only
-  plotted. `inferstack metrics --duration --interval --out` already does this,
-  and `remote/kernels/gateway_metrics.py` already samples both endpoints during
-  a run — extend that kernel rather than writing a third one.
+- Sweep `max_num_seqs` (try 32, 64, 96, 128, 256) at a fixed arrival ladder, and
+  `max_num_batched_tokens` (chunked prefill's budget) as the second knob.
+- Report a **Pareto frontier**: peak goodput against sustainable rate, one point
+  per configuration. There is no single best setting — where you sit on that
+  frontier is a product decision, and an interactive chat and an overnight batch
+  job want opposite ends of it.
+- Judge every configuration against **both** SLOs from one run.
+  `inferstack analyse` re-judges recorded runs without a GPU, so the batch-target
+  answer is free once the interactive one exists.
 - Set the placeholder alert thresholds in
-  `deploy/compose/prometheus/rules/inferstack.yml` from the resulting curve.
-- `bench/` is empty and `numpy`/`pandas`/`matplotlib`/`transformers` are already
-  in the `bench` extra.
+  `deploy/compose/prometheus/rules/inferstack.yml` from the result.
+- Extend `remote/kernels/bench_sweep.py` rather than writing a third kernel: it
+  already installs, serves, sweeps, samples and plots. It needs a loop over
+  engine configurations and an engine restart between them.
 
-Two things worth carrying forward from Phase 3:
+**Budget it.** One ladder is about 40 minutes of GPU time, so five
+configurations is a session of its own. Cut the ladder to the rates that
+straddle the knee — roughly 8, 12, 16, 20, 24 — rather than re-measuring the
+flat region five times.
 
-1. **Get to the real engine early.** The metric-name defect (§7 gotcha 19)
-   survived a full local suite because the fixture and the code were written
-   from the same assumption. Phase 4's load generator has the same exposure: a
-   synthetic upstream will happily confirm whatever the generator believes.
-2. **Pair the comparisons.** The gateway-cost numbers are unpaired across
-   sessions and that limits what they support. Phase 4 should run its
-   configurations within one session, interleaved.
+Three things to carry forward:
 
-The reasoning is written up in `docs/PROJECT-GUIDE.md` §5.3.
+1. **Check throughput against arrival rate before believing any curve.** The
+   first Phase 4 run passed every validity check and measured nothing, because
+   the workload asked the engine for three tokens.
+2. **Restart the engine between configurations.** `max_num_seqs` is a launch
+   flag, and a config change that does not restart is a config change that did
+   not happen.
+3. **Pair the comparisons within one session.** The Phase 1/Phase 3 gateway-cost
+   numbers are unpaired across sessions and that limits what they support.
+
+The reasoning is written up in `docs/PROJECT-GUIDE.md` §5.4.
