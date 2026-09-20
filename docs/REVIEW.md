@@ -1,25 +1,36 @@
-# Reviewing this before it reaches `main`
+# How to read this repository
 
-`main` is still the initial commit. Five branches stack on top of it, each cut
-from the last, and nothing merges until you have read it. This is the order to
-read it in and the things actually worth your attention.
+Phases 0–4 are merged to `main` (PRs #1–#7). This was written as a pre-merge
+review guide and is kept because the *reading order* is the useful part: the
+project is five phases of work and about 22,000 added lines, and opening it at
+`src/` is the wrong place to start.
+
+Each phase was built on its own branch, cut from the one before, and those
+branches are still on GitHub as the record of how each was built. The diff
+commands below still work.
 
 ```
-main
- └── phase-00-foundations        2 commits    32 files   +2,419
+initial commit
+ └── phase-00-foundations         2 commits   32 files   +2,419
       └── phase-01-baseline-serving   17      28 files   +5,383
-           └── phase-02-gateway        9      15 files   +1,812
+           └── phase-02-gateway         9      15 files   +1,812
                 └── phase-03-observability  29  53 files  +10,455
-                     └── phase-04-bench       1  14 files   +2,543
+                     └── phase-04-bench      14  45 files   +7,410
 ```
 
-Roughly 22,000 added lines, but a large fraction is documentation, ADRs,
-captured artifacts and test bodies. The source under `src/` is about 5,000
+Roughly 27,000 added lines, but a large fraction is documentation, ADRs,
+captured artifacts and test bodies. The source under `src/` is about 6,000
 lines. Read the ADRs first and the diffs second — every non-obvious choice has a
 record explaining what was rejected and why, and if you disagree with a decision
 the ADR is the thing to argue with, not the code implementing it.
 
 ## Read in this order (about 90 minutes)
+
+If you have ten minutes instead of ninety: the goodput chart at the top of the
+[README](../README.md), then
+[the Phase 4 result](../artifacts/curated/phase04/sweep.md), then
+[ADR-0008](adr/0008-load-is-open-loop-and-reported-as-goodput.md) for why those
+numbers are shaped the way they are.
 
 ### 1. The decisions, not the code — 20 minutes
 
@@ -112,7 +123,7 @@ for a TPOT metric by a name vLLM does not use, and nothing failed — the signal
 read as missing, the Grafana panel read "No data", the alert never fired. The
 fix is that test.
 
-### 6. Phase 4 — the benchmark harness — 15 minutes
+### 6. Phase 4 — the benchmark harness — 20 minutes
 
 ```bash
 git diff phase-03-observability..phase-04-bench -- src/inferstack/bench/
@@ -163,24 +174,21 @@ reasonably have gone the other way:
 5. **`local-cpu` will never run a real vLLM.** Written off as needing a source
    build; if you disagree it is a real piece of work, not a small one.
 
-## Merging, when you are ready
+## Working on it from here
 
-The branches are a linear chain, so each merge is a fast-forward:
+Phases 0–4 are on `main`, so the stacked-branch arrangement is finished. A new
+phase branches from `main` and returns to it by pull request:
 
 ```bash
-git checkout main
-git merge --ff-only phase-00-foundations
-git merge --ff-only phase-01-baseline-serving
-git merge --ff-only phase-02-gateway
-git merge --ff-only phase-03-observability
-git merge --ff-only phase-04-bench
-git push origin main
+git checkout main && git pull
+git checkout -b phase-05-tuning
 ```
 
-Nothing is lost by doing it in stages — stopping after Phase 3 leaves `main` at
-a coherent, fully verified point, and Phase 4 can follow later.
+The conventions that produced the history above still apply: section-scoped
+commits rather than one per phase, a message explaining *why* rather than what,
+no AI attribution anywhere, and an ADR for any decision a future reader might
+otherwise have to reverse-engineer.
 
-One thing to know: **until this lands, the repository looks empty to anyone who
-opens it.** The landing page renders `main`'s README, and `main` has one file.
-Every measurement, chart and ADR is invisible unless a visitor knows to switch
-branches.
+Phase 5 already has its hypothesis, and it came from a measurement rather than a
+guess — `max_num_seqs=256` lets the batch grow past what the T4 can drive. See
+`CONTEXT.md` §10.

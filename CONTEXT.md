@@ -23,25 +23,31 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 
 | | |
 |---|---|
-| Active branch | `phase-04-bench` |
-| Also pushed | `phase-00-foundations` (2), `phase-01-baseline-serving` (19), `phase-02-gateway` (27) |
-| Pushed | all four phase branches, including `phase-03-observability` |
-| `main` | still the initial commit — **nothing merged yet** |
+| `main` | **everything is merged** — Phases 0–4, via PRs #1–#7. 79 commits, 132 files |
+| Start new work from | **`main`**, not from the last phase branch |
+| Phase branches | all five still on GitHub as the per-phase record |
 | Tests | **364**, all passing (2 skip without `promtool`) |
 | Lint | `ruff check` and `ruff format --check` both clean (incl. bandit `S`, blind-except `BLE`) |
-| Types | `mypy` **clean**, 30 source files |
+| Types | `mypy` **clean**, 37 source files |
 | CI | `.github/workflows/ci.yml` — **green**. lint, types, tests on 3.11 + 3.12; the measurement script over real sockets; promtool over config and rules |
 | Phases done | 0, 1, 2, 3, 4 — **all verified on real hardware** |
 | Phase next | **5 — tuning: the two knobs, against the Phase 4 curve** |
 
-Branches stack: each phase branch is cut from the previous one —
-`phase-03-observability` from `phase-02-gateway` from `phase-01-baseline-serving`
-from `phase-00-foundations`. Nothing has been merged to `main`, by the user's
-choice — they want to review diffs first.
+**This changed on 20 Sep 2026.** Phases 0–4 were reviewed and merged to `main`
+through pull requests, so the repository landing page now shows the real project
+rather than an empty initial commit. The phase branches are kept as the record
+of how each phase was built, but they are history now: **branch Phase 5 from
+`main`**, not from `phase-04-bench`.
+
+Up to that point each phase branch was cut from the previous one so they
+stacked, and nothing merged until the whole chain had been reviewed. That
+convention did its job and is finished; from here a phase branches from `main`
+and returns to it by PR.
 
 ### Working conventions agreed with the user — keep following these
 
-- **One branch per phase**, branched from the previous phase branch.
+- **One branch per phase**, now branched from `main` and merged back by PR.
+  (Before the Phase 0–4 merge they stacked on each other instead.)
 - **Section-scoped commits**, not one per phase. Each commit is one coherent
   change with a message explaining *why*.
 - **No AI attribution** anywhere in commits, branches or history.
@@ -658,7 +664,8 @@ lumping them together overstates what is missing.
 
 ## 10. Next step — Phase 5, tuning, with a hypothesis already in hand
 
-Branch `phase-05-tuning` from `phase-04-bench`. Nothing is owed from Phase 4.
+Branch `phase-05-tuning` from **`main`** — Phases 0–4 are merged, so the stack
+of phase branches is no longer the trunk. Nothing is owed from Phase 4.
 
 Phase 5 is normally the phase where you guess at knobs. It is not, here: the
 Phase 4 curve already says which knob and which direction.
