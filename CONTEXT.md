@@ -25,14 +25,13 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 |---|---|
 | Active branch | `phase-03-observability` (9 commits ahead of `phase-02-gateway`) |
 | Also pushed | `phase-00-foundations` (2), `phase-01-baseline-serving` (19), `phase-02-gateway` (27) |
+| Pushed | all four phase branches, including `phase-03-observability` |
 | `main` | still the initial commit — **nothing merged yet** |
 | Tests | **271**, all passing |
 | Lint | `ruff check` and `ruff format --check` both clean (incl. bandit `S`, blind-except `BLE`) |
 | Types | `mypy` has **5 pre-existing errors** in launcher/probe/compat/app — none from Phase 3 |
 | Phases done | 0, 1, 2, 3 |
 | Phase next | **4 — benchmark harness (open-loop load)** |
-
-`phase-03-observability` is **not yet pushed** to GitHub.
 
 Branches stack: each phase branch is cut from the previous one —
 `phase-03-observability` from `phase-02-gateway` from `phase-01-baseline-serving`

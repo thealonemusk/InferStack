@@ -23,7 +23,7 @@ OpenAI-compatible HTTP, so it measures anything that does: vLLM, SGLang, TGI,
 llama.cpp's server, LM Studio, Ollama's OpenAI shim, or a hosted API.
 
 ```bash
-pip install git+https://github.com/thealonemusk/InferStack@phase-01-baseline-serving
+pip install git+https://github.com/thealonemusk/InferStack@phase-03-observability
 
 inferstack smoke \
   --base-url http://your-host:8000/v1 \
@@ -149,7 +149,7 @@ changes by one line: the base URL.
 Start it:
 
 ```bash
-pip install "inferstack[engine] @ git+https://github.com/thealonemusk/InferStack@phase-01-baseline-serving"
+pip install "inferstack[engine] @ git+https://github.com/thealonemusk/InferStack@phase-03-observability"
 
 inferstack doctor --profile colab-t4      # confirm the box can run it
 inferstack serve  --profile colab-t4      # preflight, then launch

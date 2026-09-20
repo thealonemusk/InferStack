@@ -60,7 +60,7 @@ measures anything that does — vLLM, SGLang, TGI, llama.cpp, LM Studio, Ollama,
 or a hosted API:
 
 ```bash
-pip install git+https://github.com/thealonemusk/InferStack@phase-01-baseline-serving
+pip install git+https://github.com/thealonemusk/InferStack@phase-03-observability
 
 inferstack smoke --base-url http://your-host:8000/v1 --model your-model -c 8
 ```
