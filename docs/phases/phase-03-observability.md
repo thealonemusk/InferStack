@@ -4,13 +4,44 @@
 depth, running batch size, KV-cache utilisation, preemption count — plus TTFT
 and TPOT as distributions rather than averages.
 
-**Status:** complete in software; **the run against a real vLLM has not
-happened.** Everything below was measured against a fake upstream or a
-synthetic metrics fixture. That gap is the honest headline of this phase.
+**Status:** complete, and verified on real hardware. The gateway has fronted a
+real vLLM, the engine's own metrics have been read from one, and Prometheus and
+Grafana have both been started against the committed configuration.
+
+Getting there found a defect that local testing could not: a metric name this
+project had assumed and never checked, wrong in a way that fails silently in
+three places at once.
 
 ---
 
-## Result
+## Result 0: the gateway in front of a real engine
+
+Kaggle, 2× Tesla T4, vLLM 0.29.0, Qwen2.5-1.5B-Instruct in float16. Phase 1's
+batching proof, re-run **through the gateway**. Artifacts:
+`artifacts/curated/phase03/gateway-in-front-of-vllm.md`.
+
+| | Phase 1, direct | Phase 3, through the gateway |
+|---|---|---|
+| Single request, **TTFT** | **26 ms** | **33 ms** |
+| Single request, TPOT | 14.6 ms/token | 15.1 ms/token |
+| 8 requests, measured | 1.04 s | 1.069 s |
+| **Speedup over serial** | **7.3×** | **7.38×** |
+| Output throughput | 493 tok/s | 479 tok/s |
+
+**The gateway costs about 7 ms of TTFT and under 3% of throughput**, and
+continuous batching is untouched by it. The 7 ms corroborates the ~7.5 ms
+measured locally against a fake upstream on a different machine: two machines,
+two upstreams, the same cost — which is what an HTTP hop costs.
+
+Both views of the load agreed. The engine's scheduler reported 8 running and the
+gateway's admission gauge reported 8 in flight, from separate processes with
+separate registries. Queue depth stayed at 0 and KV cache peaked at 0.17%,
+because the batch had room for 78.84×.
+
+One run per configuration on two different sessions, unpaired — the artifact
+says so where the numbers are.
+
+## Result 1: what the instrumentation costs
 
 Two gateways in front of one fake upstream on real loopback sockets, differing
 in exactly one setting. Full results in `artifacts/curated/phase03/`;
@@ -42,8 +73,9 @@ about ±1 ms on this machine. The correct statement is "the cost is below what
 this measurement can see", not "free". Rounding it to "free" would be the exact
 kind of claim this project is trying not to make.
 
-And the number that closes a Phase 2 loop — 8 concurrent streams, scraped while
-all 8 were open:
+## Result 2: admission, observed from outside
+
+8 concurrent streams, scraped while all 8 were open:
 
 | `/metrics` said | |
 |---|---|
@@ -53,6 +85,35 @@ all 8 were open:
 
 Had the admission slot been released when the handler returned — the bug Phase 2
 found — this would have read 0 while 8 streams were running.
+
+## Result 3: the stack, started
+
+Prometheus 2.55.1 and Grafana 11.3.1, run against the committed configuration
+with the real vLLM capture served as the engine. Recorded in
+`artifacts/curated/phase03/stack-verification.json`; reproduce with
+`scripts/verify_observability.py`.
+
+| Check | Result |
+|---|---|
+| Scrape targets up | gateway, vllm, prometheus |
+| Dashboard panels returning data | **11 / 11** |
+| PromQL errors | 0 |
+| Rules loaded | 10 alerting, 3 recording, **0 in error** |
+| Grafana datasource `inferstack-prometheus` | provisioned and found |
+| Grafana dashboard | loaded, 11 panels, `provisioned: true` |
+| Query issued *through* Grafana | returned data |
+
+The test that existed before checked that panels *name* metrics that exist,
+which catches a typo and nothing else. It passed while the TPOT panel was dead,
+because the panel and the code agreed on a name neither had checked. Running the
+queries is what found that.
+
+And a cross-check worth more than any of the above: Prometheus' own
+`histogram_quantile`, evaluated over the same capture, returns
+`2.350000000000001 / 0.024850000000000004 / 0.02484973821989529` for the three
+p99s — and `observability/histograms.py` returns the same values to
+floating-point noise. Mirroring Prometheus' arithmetic was a claim until the two
+were compared on the same data. `tests/test_histograms.py` now pins it.
 
 ## What was built
 
@@ -65,9 +126,13 @@ found — this would have read 0 while 8 streams were running.
 | `gateway/app.py` | `/metrics`, stream duration, disconnect counter |
 | `gateway/middleware.py` | Per-request counters and time-to-headers |
 | CLI `inferstack metrics` | Read and summarise an engine, or sample it to JSONL |
-| `deploy/compose/` | Prometheus + Grafana, dashboard, provisioning |
+| `deploy/compose/` | Prometheus + Grafana, dashboard, provisioning, alert rules |
+| `remote/kernels/gateway_metrics.py` | The whole stack on a GPU session, unattended |
+| `scripts/measure_phase03.py` | What the instrumentation costs, reproducibly |
+| `scripts/verify_observability.py` | Prometheus and Grafana, actually started |
+| `.github/workflows/ci.yml` | lint, types, tests, the measurement, promtool |
 
-108 new tests (163 → **271**), `ruff` clean.
+139 new tests (163 → **302**), `ruff` clean, `mypy` clean.
 
 The read path — parser, quantiles, engine selection, CLI — deliberately depends
 only on the core packages. `prometheus_client` lives in the `gateway` extra, and
@@ -122,6 +187,23 @@ computed identically.
 
 ## Bugs and surprises worth recording
 
+**A metric name that was wrong, and failed silently in three places.** TPOT was
+declared as `vllm:time_per_output_token_seconds`. vLLM 0.29.0 emits
+`vllm:request_time_per_output_token_seconds` and nothing by the assumed name.
+Nothing errored: the snapshot listed the signal as missing, the Grafana panel
+rendered "No data", and the alert could never fire — three symptoms
+indistinguishable from a healthy idle system. It survived because the synthetic
+fixture and the code were written from the same assumption by the same person.
+
+The capture also showed `vllm:inter_token_latency_seconds` to be a *separate*
+metric rather than a synonym: 574 ITL observations against 10 TPOT ones for the
+same ten requests. That is the ITL/TPOT distinction §2.7 of the guide makes,
+and half of it was simply not being collected.
+
+The fix is a test, not a rename: every signal in `ENGINE_SIGNALS` must be
+present in the real capture, so declaring a metric vLLM does not emit now fails
+locally.
+
 **httpx's ASGI transport buffers the response body.** The obvious end-to-end
 test — open a stream, scrape `/metrics` mid-flight, assert in-flight is 1 —
 deadlocks: the transport waits for the whole body, and the body is waiting for
@@ -165,43 +247,89 @@ curl localhost:8080/metrics
 inferstack metrics --url http://127.0.0.1:8000 \
   --duration 60 --interval 0.2 --out artifacts/runs/load.jsonl
 
-# The stack (never started on this machine - no Docker):
+# The stack:
 docker compose -f deploy/compose/docker-compose.yml up -d
 ```
 
 ```bash
-pytest tests/test_promtext.py tests/test_histograms.py \
-       tests/test_engine_metrics.py tests/test_gateway_metrics.py \
-       tests/test_deploy_config.py
-python scripts/measure_phase03.py
+pytest                                    # 302 tests
+ruff check . && ruff format --check src tests scripts
+mypy
+
+python scripts/measure_phase03.py --out /tmp/check    # instrumentation cost
+python scripts/verify_observability.py \
+    --prometheus /path/to/prometheus --grafana /path/to/grafana \
+    --engine-metrics tests/fixtures/vllm_metrics_real.txt
 ```
 
-## Known gaps
+The whole stack on a GPU session, unattended — install, serve, gateway, load,
+scrape both, export:
 
-- **No engine metrics have ever been scraped from a real vLLM.** The parser and
-  the selection rules are tested against `tests/fixtures/vllm_metrics.txt`,
-  which is hand-written from vLLM's documented metric names and says so in its
-  header. This is why `kv_cache_usage_perc` and `gpu_cache_usage_perc` are both
-  accepted: the V1 spelling has not been confirmed against vLLM 0.29.0.
-- **The gateway still has not fronted a real vLLM.** This was listed as a
-  Phase 3 task and it did not happen. It needs a GPU session, and it is the
-  first thing worth doing next.
-- **Prometheus and Grafana have never been started.** No Docker on the
-  development machine. A test checks the dashboard's queries reference metrics
-  that exist and that the panels' datasource uid is the provisioned one; that
-  catches a typo and nothing else.
-- **Still one concurrency point, still closed-loop.** No arrival rates, no
-  percentile curves, no goodput. Phase 4.
-- **No alerting rules.** Prometheus is configured to scrape, not to page.
-- **No tracing.** Request ids exist and appear in logs, but nothing correlates a
-  request across the gateway and the engine.
-- **The gateway's bucket boundaries are coupled to vLLM's defaults.** Chosen so
-  the two histograms compare directly; a vLLM release that changes its own
-  boundaries would end that comparability silently.
+```python
+from inferstack.remote.kaggle import KaggleRunner, KernelSpec
+import shutil
+from pathlib import Path
+
+work = Path("kernel-build-phase03"); work.mkdir(exist_ok=True)
+shutil.copy("src/inferstack/remote/kernels/gateway_metrics.py", work / "main.py")
+
+spec = KernelSpec(id="thealonemusk/inferstack-phase03-stack",
+                  title="inferstack-phase03-stack",
+                  enable_gpu=True, enable_internet=True)
+runner = KaggleRunner(spec)
+print(runner.push(work))
+runner.wait(timeout_s=5400)
+runner.fetch_output(Path("kaggle-out-phase03"))
+```
+
+## What is deliberately not here
+
+Phase 3's own gaps are closed. What remains is either a later phase or a
+decision, and the difference matters:
+
+**Later phases, by design:**
+
+- **One concurrency point, closed-loop.** No arrival rates, no percentile
+  curves, no goodput. That is Phase 4, and this phase deliberately does not
+  anticipate it — `smoke` is labelled a sanity check for exactly this reason.
+- **Tensor parallelism untested.** Two T4s were attached to the run; `colab-t4`
+  uses one. Phase 6.
+- **No per-key rate limiting, no multi-replica routing.** Admission control is
+  global and there is one upstream per gateway. Phase 7.
+
+**Decisions, not omissions:**
+
+- **No tracing.** Request ids reach the logs, but nothing correlates a request
+  across the gateway and the engine. OTLP would solve it properly and was
+  weighed and deferred in
+  [ADR-0007](../adr/0007-metrics-are-pulled-per-component.md): it adds a
+  collector to run and a second vocabulary beside vLLM's Prometheus metrics,
+  which are not going anywhere. Revisit when there is more than one replica to
+  correlate across.
+- **`local-cpu` has still never run a real vLLM.** vLLM publishes CUDA-only
+  Linux wheels and V1 removed `--device`, so CPU serving needs a source build.
+  That is disproportionate for a target whose numbers are never reported —
+  `local-cpu` exists for the development loop and API correctness, and
+  `inferstack doctor` refuses to pretend otherwise.
+
+**Known consequences, written down so they are not surprises:**
+
+- **The gateway's histogram buckets are coupled to vLLM's defaults.** Chosen so
+  the two histograms compare bucket for bucket; a vLLM release that changes its
+  own boundaries would end that comparability silently.
+- **The Phase 1 and Phase 3 numbers are unpaired.** Different sessions, one run
+  each. The 7 ms TTFT cost is quoted because an independent local measurement
+  corroborates it, not because one sample either side establishes it.
+- **Alert thresholds are placeholders.** They say so in their own description
+  text, and a test keeps them saying it. A latency target is a product decision
+  and should come from the Phase 4 curve.
 
 ## Next
 
-**Phase 4 — the benchmark harness.** Open-loop load at controlled arrival rates,
+**Phase 4 — the benchmark harness.** Nothing from Phase 3 is owed first; the
+engine-side run happened, the stack has been started, and CI runs the lot.
+
+Open-loop load at controlled arrival rates,
 because a closed-loop generator sends *fewer* requests when the server slows
 down and so hides the problem it was built to find. Latency versus arrival rate
 as a curve, plus goodput under a stated SLO — with the metrics from this phase

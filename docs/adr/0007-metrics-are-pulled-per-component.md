@@ -114,9 +114,34 @@ scrape interval.
 With 8 streams open, `inferstack_gateway_in_flight_requests` read 8, and 0 once
 the last chunk was relayed.
 
-**Not measured:** no engine metrics have been scraped from a running vLLM, and
-Prometheus and Grafana have never been started — there is no Docker on the
-development machine.
+### Against a real engine, and with the stack running
+
+The above was a laptop and a fake upstream. On 20 Sep 2026 the gateway fronted
+vLLM 0.29.0 on a Tesla T4 and Phase 1's batching proof was re-run through it:
+**7.38× speedup against 7.3× direct, 479 tok/s against 493, TTFT 33 ms against
+26 ms.** The 7 ms TTFT cost corroborates the ~7.5 ms above, on different
+hardware against a different upstream.
+
+The engine's scheduler and the gateway's admission gauge independently reported
+8 requests in flight, from separate processes and separate registries.
+
+Prometheus 2.55.1 and Grafana 11.3.1 have since been started against this
+configuration with that engine's own exposition replayed to them: all scrape
+targets up, **11/11 dashboard panels returning data**, 13 rules loaded with none
+in error, the datasource provisioned and found by uid, the dashboard loaded and
+marked provisioned, and a query issued through Grafana answered by Prometheus.
+
+That run also cross-checked the arithmetic this ADR commits to: Prometheus'
+`histogram_quantile` over the captured exposition and
+`observability/histograms.py` over the same bytes return the same p99s to
+floating-point noise.
+
+**What the decision cost.** Matching vLLM's bucket boundaries assumed we knew
+its metric names, and we did not: TPOT was declared as
+`vllm:time_per_output_token_seconds`, which 0.29.0 does not emit. Nothing
+failed — the signal was listed as missing, the panel rendered "No data" and the
+alert could never fire. A pull-based design does not protect against naming the
+wrong thing to pull; only reading a real endpoint does.
 
 ## Alternatives considered
 
