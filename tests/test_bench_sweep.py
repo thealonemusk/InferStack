@@ -25,11 +25,20 @@ from inferstack.bench.report import ServiceLevel
 from inferstack.bench.sweep import SweepConfig, run_sweep
 from inferstack.engine.client import CompletionResult
 
-# A server with 8 slots and 0.5 s of service time completes 8 / 0.5 = 16
+# Real load against a real event loop: seconds, not milliseconds. Marked so a
+# tight inner-loop run can skip them with `-m "not slow"`.
+pytestmark = pytest.mark.slow
+
+# A server with 8 slots and 0.2 s of service time completes 8 / 0.2 = 40
 # requests per second. Below that it keeps up; above it, the queue grows without
 # bound and latency climbs until requests miss their SLO.
+#
+# The clock is deliberately fast. These are real async runs, not simulated
+# time, and an overloaded step has to wait for its own backlog to drain - so a
+# slower simulated server costs wall-clock seconds for no extra confidence. The
+# physics is identical at any service time; only the axis labels move.
 SLOTS = 8
-SERVICE_S = 0.5
+SERVICE_S = 0.2
 CAPACITY_PER_S = SLOTS / SERVICE_S
 
 
@@ -66,12 +75,12 @@ class SimulatedEngine:
             )
 
 
-def config(rates: list[float], duration: float = 4.0, ttft_slo: float = 0.35) -> SweepConfig:
+def config(rates: list[float], duration: float = 2.0, ttft_slo: float = 0.14) -> SweepConfig:
     return SweepConfig(
         rates=rates,
         duration_s=duration,
         workload=Workload(approx_prompt_tokens=16, max_tokens=16),
-        # TTFT budget deliberately tight relative to the 0.05 s prefill, so the
+        # TTFT budget deliberately tight relative to the 0.02 s prefill, so the
         # SLO starts failing when queueing begins rather than long after.
         slo=ServiceLevel(ttft_s=ttft_slo, tpot_s=0.1),
         seed=99,
@@ -112,7 +121,7 @@ async def test_the_sweep_finds_a_capacity_it_was_not_told() -> None:
     in the right neighbourhood rather than at a precise value.
     """
     engine = SimulatedEngine()
-    report, _ = await sweep(engine, config([4.0, 8.0, 24.0, 40.0]))
+    report, _ = await sweep(engine, config([10.0, 20.0, 60.0, 80.0]))
 
     assert report.generator_kept_up, "the test itself was the bottleneck"
     sustainable = report.max_sustainable_rate_per_s
@@ -128,7 +137,7 @@ async def test_the_sweep_finds_a_capacity_it_was_not_told() -> None:
 async def test_beyond_capacity_the_queue_grows_and_latency_follows() -> None:
     """The shape that makes the curve worth plotting."""
     engine = SimulatedEngine()
-    report, _ = await sweep(engine, config([4.0, 40.0]))
+    report, _ = await sweep(engine, config([10.0, 80.0]))
 
     low, high = report.ordered[0], report.ordered[-1]
     assert low.ttft_p99_s is not None and high.ttft_p99_s is not None
@@ -142,7 +151,7 @@ async def test_completed_throughput_flattens_at_capacity() -> None:
     This is what a throughput-only benchmark reports as 'saturated' and stops.
     """
     engine = SimulatedEngine()
-    report, _ = await sweep(engine, config([24.0, 48.0]))
+    report, _ = await sweep(engine, config([60.0, 100.0]))
 
     rates = [s.completed_rate_per_s for s in report.ordered]
     assert max(rates) < CAPACITY_PER_S * 1.35
@@ -157,10 +166,10 @@ async def test_goodput_collapses_while_throughput_holds() -> None:
     nothing it produces arrives in time to count.
     """
     engine = SimulatedEngine()
-    report, _ = await sweep(engine, config([4.0, 48.0]))
+    report, _ = await sweep(engine, config([10.0, 100.0]))
 
     overloaded = report.ordered[-1]
-    assert overloaded.completed_rate_per_s > 5.0, "the server was still working"
+    assert overloaded.completed_rate_per_s > 15.0, "the server was still working"
     assert overloaded.goodput_per_s < overloaded.completed_rate_per_s * 0.5
     assert overloaded.slo_attainment < 0.5
 
@@ -171,15 +180,15 @@ async def test_goodput_collapses_while_throughput_holds() -> None:
 async def test_per_request_records_are_written_for_every_step(tmp_path: Path) -> None:
     """Collection and analysis stay separable: a curve that can only be
     recomputed by re-running the load is one nobody will re-examine."""
-    cfg = config([4.0, 8.0], duration=2.0)
+    cfg = config([10.0, 20.0], duration=1.5)
     cfg.records_dir = tmp_path / "records"
 
     _report, results = await sweep(SimulatedEngine(), cfg)
 
     files = sorted(p.name for p in cfg.records_dir.glob("*.jsonl"))
-    assert files == ["rate-4.jsonl", "rate-8.jsonl"]
+    assert files == ["rate-10.jsonl", "rate-20.jsonl"]
 
-    lines = (cfg.records_dir / "rate-8.jsonl").read_text(encoding="utf-8").splitlines()
+    lines = (cfg.records_dir / "rate-20.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == len(results[1].records)
     first = json.loads(lines[0])
     assert "ttft_from_schedule_s" in first
@@ -189,18 +198,18 @@ async def test_per_request_records_are_written_for_every_step(tmp_path: Path) ->
 async def test_steps_run_low_to_high_whatever_order_they_are_given() -> None:
     """A preempted, cache-thrashed engine does not recover instantly, so a high
     step followed by a low one measures the recovery."""
-    report, _ = await sweep(SimulatedEngine(), config([40.0, 4.0, 8.0], duration=2.0))
+    report, _ = await sweep(SimulatedEngine(), config([80.0, 10.0, 20.0], duration=1.0))
     rates = [s.offered_rate_per_s for s in report.ordered]
     assert rates == sorted(rates)
 
 
 async def test_the_report_carries_what_was_asked_for() -> None:
-    report, _ = await sweep(SimulatedEngine(), config([4.0], duration=2.0))
+    report, _ = await sweep(SimulatedEngine(), config([10.0], duration=1.0))
     payload = report.to_dict()
 
     assert payload["meta"]["model"] == "sim-model"
     assert payload["meta"]["config"]["seed"] == 99
-    assert payload["slo"]["ttft_s"] == pytest.approx(0.35)
+    assert payload["slo"]["ttft_s"] == pytest.approx(0.14)
     assert payload["generator_kept_up"] is True
 
 
@@ -209,7 +218,7 @@ async def test_a_curve_can_be_plotted_without_a_display() -> None:
     pytest.importorskip("matplotlib")
     from inferstack.bench.plots import plot_goodput, plot_sweep
 
-    report, _ = await sweep(SimulatedEngine(), config([4.0, 24.0], duration=2.0))
+    report, _ = await sweep(SimulatedEngine(), config([10.0, 60.0], duration=1.0))
 
     import tempfile
 

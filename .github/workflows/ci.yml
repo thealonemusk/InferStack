@@ -53,7 +53,7 @@ jobs:
         # are silently skipped and the suite still passes.
         run: |
           uv venv --python ${{ matrix.python }}
-          uv pip install -e ".[dev,gateway]"
+          uv pip install -e ".[dev,gateway,bench]"
 
       # Called through the venv's own interpreter rather than `uv run`.
       # `uv run` treats this directory as a project and re-resolves against
@@ -87,7 +87,7 @@ jobs:
       - name: Install the project
         run: |
           uv venv
-          uv pip install -e ".[dev,gateway]"
+          uv pip install -e ".[dev,gateway,bench]"
 
       - name: Run the Phase 3 measurement over real sockets
         # Writes to a scratch directory, never over the committed artifact: a
@@ -121,7 +121,7 @@ jobs:
       - name: Install the project
         run: |
           uv venv
-          uv pip install -e ".[dev,gateway]"
+          uv pip install -e ".[dev,gateway,bench]"
 
       - name: Install promtool
         # The development machine has no Docker and no Prometheus, so these
