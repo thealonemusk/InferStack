@@ -379,8 +379,8 @@ methodology, not a workaround — say it that way.
 | 1 | vLLM serving + continuous batching proven on hardware | ✅ done |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ done |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache util | ✅ done, verified on a T4 |
-| 4 | Benchmark harness: Poisson arrivals, sweeps, p50/p95/p99 | ← next |
-| 5 | Continuous batching tuning → latency/throughput Pareto curves | |
+| 4 | Benchmark harness: Poisson arrivals, sweeps, p50/p95/p99 | ✅ done, on a T4 |
+| 5 | Continuous batching tuning → latency/throughput Pareto curves | ← next |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, TP=2 | |
 | 7 | Rate limiting, admission control, drain, multi-replica routing | |
 | 8 | SGLang on the identical harness, head to head | |
@@ -489,6 +489,30 @@ and your latency numbers show it. That's the honest measurement.
 
 Phase 4 reports a *curve* — latency versus arrival rate — not a single number,
 plus **goodput** under a stated SLO.
+
+**Coordinated omission survives an open-loop design, too.** This is the part
+most people miss. Suppose your generator is correct — it fires on a schedule and
+never waits — but it is itself saturated, and a request due at t=10.0 goes out
+at t=12.5. That user waited 12.5 seconds; your log says the server answered in
+0.2. Every record therefore carries *two* clocks, and the honest percentile is
+the one measured from when the request was **due**. The gap between the two is
+reported per step, and a sweep where it exceeds 250 ms is marked invalid and
+exits non-zero, because at that point the curve describes the load generator.
+
+That is not hypothetical. On the development laptop the generator falls off a
+cliff somewhere between 41 and 62 req/s and is late by more than a second, which
+produces a textbook saturation knee that has nothing to do with the server. It
+is measured in `artifacts/curated/phase04/generator-ceiling.md`.
+
+**And one trap that no amount of methodology catches.** The first sweep on real
+hardware was flawless by every check the harness has — Poisson arrivals, a
+generator late by 16 ms, honest percentiles, the engine drained between steps —
+and completely worthless, because the prompt asked the model to "summarise in
+one word" and it obliged. Three tokens per response, `max_tokens=128` never
+approached, decode never exercised, and therefore a perfectly flat curve. The
+validity checks guard the *measurement*; nothing guards the *workload*. Pin
+output length with `ignore_eos`, and check throughput against arrival rate
+before believing a flat line.
 
 ### 5.4 Phase 5 — the two knobs, and Little's Law
 
