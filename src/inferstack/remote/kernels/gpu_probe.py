@@ -114,7 +114,10 @@ def derive_capabilities(torch_facts: dict) -> dict:
 
     major, minor = (int(p) for p in devices[0]["compute_capability"].split("."))
     sm = (major, minor)
-    caps = {feature: sm >= threshold for feature, threshold in THRESHOLDS.items()}
+    # Not a dict[str, bool]: the last entry is a count, not a flag.
+    caps: dict[str, bool | int] = {
+        feature: sm >= threshold for feature, threshold in THRESHOLDS.items()
+    }
     caps["tensor_parallel_max"] = len(devices)
     return caps
 

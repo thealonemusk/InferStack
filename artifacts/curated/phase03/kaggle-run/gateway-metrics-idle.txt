@@ -1,0 +1,74 @@
+# HELP inferstack_gateway_requests_total Requests completed to the point of a response status.
+# TYPE inferstack_gateway_requests_total counter
+inferstack_gateway_requests_total{method="GET",route="/health",status="200",stream="false"} 1.0
+inferstack_gateway_requests_total{method="GET",route="/ready",status="200",stream="false"} 1.0
+# HELP inferstack_gateway_requests_created Requests completed to the point of a response status.
+# TYPE inferstack_gateway_requests_created gauge
+inferstack_gateway_requests_created{method="GET",route="/health",status="200",stream="false"} 1.7899019687312107e+09
+inferstack_gateway_requests_created{method="GET",route="/ready",status="200",stream="false"} 1.789901968735977e+09
+# HELP inferstack_gateway_time_to_headers_seconds Request received to response headers sent. For a stream this is TTFT.
+# TYPE inferstack_gateway_time_to_headers_seconds histogram
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_count{route="/health",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/health",stream="false"} 0.002259396999988894
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_count{route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/ready",stream="false"} 0.003376833000061197
+# HELP inferstack_gateway_time_to_headers_seconds_created Request received to response headers sent. For a stream this is TTFT.
+# TYPE inferstack_gateway_time_to_headers_seconds_created gauge
+inferstack_gateway_time_to_headers_seconds_created{route="/health",stream="false"} 1.7899019687312412e+09
+inferstack_gateway_time_to_headers_seconds_created{route="/ready",stream="false"} 1.7899019687360022e+09
+# HELP inferstack_gateway_stream_duration_seconds Request received to last chunk relayed, for streaming responses.
+# TYPE inferstack_gateway_stream_duration_seconds histogram
+# HELP inferstack_gateway_stream_chunks_total Chunks relayed downstream.
+# TYPE inferstack_gateway_stream_chunks_total counter
+# HELP inferstack_gateway_streams_disconnected_total Streams whose client hung up before the response finished.
+# TYPE inferstack_gateway_streams_disconnected_total counter
+# HELP inferstack_gateway_info Build and configuration of this gateway; the value is always 1.
+# TYPE inferstack_gateway_info gauge
+inferstack_gateway_info{engine_backend="vllm",model="qwen2.5-1.5b",profile="colab-t4",version="0.1.0"} 1.0
+# HELP inferstack_gateway_in_flight_requests Requests currently being served, including streams still relaying.
+# TYPE inferstack_gateway_in_flight_requests gauge
+inferstack_gateway_in_flight_requests 0.0
+# HELP inferstack_gateway_waiting_requests Requests waiting for an admission slot.
+# TYPE inferstack_gateway_waiting_requests gauge
+inferstack_gateway_waiting_requests 0.0
+# HELP inferstack_gateway_capacity_requests Configured maximum of concurrent requests.
+# TYPE inferstack_gateway_capacity_requests gauge
+inferstack_gateway_capacity_requests 512.0
+# HELP inferstack_gateway_admitted_total Requests granted an admission slot since start.
+# TYPE inferstack_gateway_admitted_total counter
+inferstack_gateway_admitted_total 0.0
+# HELP inferstack_gateway_rejected_total Requests shed with 429 because no slot became free in time.
+# TYPE inferstack_gateway_rejected_total counter
+inferstack_gateway_rejected_total 0.0

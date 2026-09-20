@@ -129,14 +129,22 @@ Tests: `pytest tests/test_gateway.py` — 25 tests against an httpx
 
 - **No rate limiting per key.** Admission control is global; per-key quotas are
   Phase 7.
-- **No metrics endpoint.** `AdmissionController.stats()` exists and is exposed
-  on `/ready`, but Prometheus wiring is Phase 3.
 - **No request-level timeout distinct from the upstream timeout.** A slow
   stream is bounded only by the client and the engine.
 - **No multi-replica routing.** One upstream per gateway. Phase 7.
-- **Not yet run against a real vLLM.** The pass-through was measured against a
-  fake upstream over real sockets; wiring it in front of the engine on a GPU
-  session is a Phase 3 task, when there will be metrics worth collecting.
+
+Two gaps listed here originally were closed in Phase 3 and are struck out
+rather than deleted, because the dates matter:
+
+- ~~No metrics endpoint.~~ `/metrics` exposes the gateway's own registry, and
+  the admission counts are collected from `AdmissionController` at scrape time
+  rather than mirrored — so the counter that was wrong in the bug above cannot
+  drift from the thing it describes.
+- ~~Not yet run against a real vLLM.~~ Done on 20 Sep 2026: the gateway fronted
+  vLLM 0.29.0 on a Tesla T4 and Phase 1's batching proof was re-run through it.
+  **7.38× speedup against 7.3× direct, and 33 ms TTFT against 26 ms** — the
+  gateway costs about 7 ms, which is an HTTP hop. See
+  `artifacts/curated/phase03/gateway-in-front-of-vllm.md`.
 
 ## Next
 

@@ -1,0 +1,55 @@
+# Prometheus scrape configuration for InferStack.
+#
+# Two jobs, scraped independently. The gateway does not aggregate or proxy the
+# engine's metrics (ADR-0007): a proxied scrape would attribute the engine's
+# staleness to the gateway, and a gateway that is down would take the engine's
+# metrics with it exactly when they are most needed.
+
+global:
+  # 15s is the Prometheus default and is too coarse here. A 64-token generation
+  # at the 14.6 ms/token measured in Phase 1 lasts about one second, so at 15s
+  # a whole load episode - batch fills, queue builds, cache drains - can happen
+  # entirely between two samples and leave no trace.
+  #
+  # 5s does not fix that, it only narrows it. Histogram-based percentiles
+  # survive a coarse interval because buckets are cumulative; the *gauges*
+  # (queue depth, running batch, cache usage) are instantaneous and cannot be
+  # recovered. For sub-second resolution use
+  # `inferstack metrics --duration 60 --interval 0.2`, which samples from
+  # inside the run rather than from a scraper outside it.
+  scrape_interval: 5s
+  scrape_timeout: 3s
+  external_labels:
+    stack: inferstack
+
+# Relative, not absolute: Prometheus resolves rule_files against the directory
+# holding this config, so `rules/*.yml` is /etc/prometheus/rules/*.yml in the
+# container AND deploy/compose/prometheus/rules/*.yml under `promtool check
+# config` in CI. An absolute container path would make that check silently
+# validate nothing.
+# Thresholds in there are defaults, not measured SLOs - see that file's header.
+rule_files:
+  - rules/*.yml
+
+scrape_configs:
+  # The gateway: admission control, shed load, time to first byte as the client
+  # experiences it. Nothing here is sensitive, so the scrape carries no
+  # credential - see ADR-0007.
+  - job_name: inferstack-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          component: gateway
+
+  # The engine: the four signals that actually explain a latency number.
+  - job_name: vllm
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          component: engine
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

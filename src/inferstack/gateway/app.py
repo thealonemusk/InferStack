@@ -12,13 +12,14 @@ schema and falling behind it.
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from inferstack.config import Settings, load_settings
 from inferstack.gateway.auth import authenticate
@@ -29,9 +30,10 @@ from inferstack.gateway.errors import (
     gateway_error_handler,
 )
 from inferstack.gateway.limits import AdmissionController
-from inferstack.gateway.middleware import RequestContextMiddleware
+from inferstack.gateway.middleware import RequestContextMiddleware, route_label
 from inferstack.gateway.proxy import EngineProxy
 from inferstack.logging import configure_logging, get_logger
+from inferstack.observability.metrics import GatewayMetrics
 from inferstack.version import __version__
 
 log = get_logger("inferstack.gateway")
@@ -59,22 +61,47 @@ async def _json_body(request: Request) -> dict[str, Any]:
 
 
 def _hold_slot_until_stream_ends(
-    response: StreamingResponse, release: Callable[[], None]
+    response: StreamingResponse,
+    release: Callable[[], None],
+    *,
+    metrics: GatewayMetrics | None = None,
+    route: str = "",
+    started: float | None = None,
 ) -> StreamingResponse:
     """Keep an admission slot held for as long as the response body flows.
 
     The handler returns as soon as the upstream headers arrive, but the request
     is not finished until the last token has been relayed. Releasing on return
     would let unlimited streams run concurrently while the counter read zero.
+
+    This is also the only place that knows when a stream *ended*, and whether it
+    ended because the response finished or because the client hung up - so it is
+    where the stream duration and the disconnect counter are recorded.
     """
     original = response.body_iterator
+    origin = started if started is not None else time.perf_counter()
 
-    async def wrapped() -> AsyncIterator[bytes]:
+    # Starlette's body iterator yields str, bytes or memoryview - relaying it
+    # as bytes-only would be a claim about the upstream response we do not check.
+    async def wrapped() -> AsyncIterator[str | bytes | memoryview]:
+        chunks = 0
+        completed = False
         try:
             async for chunk in original:
+                chunks += 1
                 yield chunk
+            completed = True
         finally:
+            # Ordering matters: the slot is freed before the metric is recorded,
+            # so a failure in instrumentation can never leak admission capacity.
             release()
+            if metrics is not None:
+                metrics.observe_stream(
+                    route=route,
+                    duration_s=time.perf_counter() - origin,
+                    chunks=chunks,
+                    completed=completed,
+                )
 
     response.body_iterator = wrapped()
     return response
@@ -100,6 +127,23 @@ def create_app(settings: Settings | None = None, proxy: EngineProxy | None = Non
         max_concurrent=settings.gateway.max_concurrent_requests,
         max_queue_wait_s=settings.gateway.max_queue_wait_s,
     )
+
+    # A registry per app, never the process-global default: building a gateway
+    # twice in one process is normal (tests, --reload, a mounted
+    # sub-application) and registering the same metric name twice into a shared
+    # registry raises. The admission numbers are *collected* from the controller
+    # at scrape time rather than mirrored into gauges, so there is exactly one
+    # source of truth for how many requests are in flight.
+    metrics: GatewayMetrics | None = None
+    if settings.observability.metrics_enabled:
+        metrics = GatewayMetrics()
+        metrics.set_info(
+            version=__version__,
+            profile=settings.profile,
+            engine_backend=settings.engine.backend,
+            model=settings.engine.model_id,
+        )
+        metrics.track_admission(admission.stats)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -130,6 +174,7 @@ def create_app(settings: Settings | None = None, proxy: EngineProxy | None = Non
     app.state.settings = settings
     app.state.proxy = engine_proxy
     app.state.admission = admission
+    app.state.metrics = metrics
 
     # --- operational endpoints -------------------------------------------
 
@@ -159,6 +204,27 @@ def create_app(settings: Settings | None = None, proxy: EngineProxy | None = Non
         }
         return JSONResponse(body, status_code=200 if upstream_ok else 503)
 
+    if metrics is not None:
+
+        @app.get(settings.observability.metrics_path, include_in_schema=False)
+        async def metrics_endpoint(request: Request) -> Response:
+            """Prometheus exposition for this gateway.
+
+            Deliberately *not* behind the client API key. Prometheus is
+            infrastructure, not a caller: making it present a client credential
+            means the scrape config holds a user's key, and rotating that key
+            silently blinds the dashboard. Nothing exposed here is sensitive -
+            no key material, no prompt text, no client identity - and keeping it
+            that way is a constraint on every future metric, not an accident of
+            this one.
+
+            It is also not a place to aggregate the engine's metrics. Prometheus
+            scrapes vLLM directly; see ADR-0007.
+            """
+            gateway_metrics: GatewayMetrics = request.app.state.metrics
+            payload, content_type = gateway_metrics.render()
+            return Response(payload, media_type=content_type)
+
     # --- OpenAI-compatible surface ---------------------------------------
 
     @app.get("/v1/models")
@@ -178,7 +244,13 @@ def create_app(settings: Settings | None = None, proxy: EngineProxy | None = Non
             if payload.get("stream"):
                 response = await proxy.stream(path, payload)
                 # Slot ownership transfers to the stream; do not release here.
-                return _hold_slot_until_stream_ends(response, admission.release)
+                return _hold_slot_until_stream_ends(
+                    response,
+                    admission.release,
+                    metrics=request.app.state.metrics,
+                    route=route_label(request),
+                    started=getattr(request.state, "started", None),
+                )
 
             status, body = await proxy.forward(path, payload)
             admission.release()

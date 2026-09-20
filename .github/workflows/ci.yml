@@ -1,0 +1,149 @@
+# Continuous integration.
+#
+# Three jobs, deliberately separate, because they fail for different reasons and
+# a single red tick that could mean any of them is worth less than three.
+#
+# What this cannot check: anything needing a GPU. Every measured number in this
+# repository comes from a Kaggle session or a local run, and CI is not where
+# performance is established - it is where the code that produces those numbers
+# is kept from rotting between sessions.
+
+name: CI
+
+on:
+  push:
+    branches: [main, "phase-**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A second push supersedes the first: nobody needs the results of a commit
+  # that has already been replaced.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Ruff and mypy are pinned by pyproject; this just keeps uv quiet and fast.
+  UV_SYSTEM_PYTHON: 0
+
+jobs:
+  checks:
+    name: lint, types, tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of requires-python. 3.11 is the floor a Colab or Kaggle
+        # session may still be on; 3.12 is the development machine.
+        python: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Install the project
+        # The gateway extra is not optional here: without it the metrics tests
+        # are silently skipped and the suite still passes.
+        run: |
+          uv venv --python ${{ matrix.python }}
+          uv pip install -e ".[dev,gateway]"
+
+      # Called through the venv's own interpreter rather than `uv run`.
+      # `uv run` treats this directory as a project and re-resolves against
+      # uv.lock, which on 3.11 produced an environment with no ruff in it and
+      # an exit code 2 that read as a lint failure. One environment, built
+      # once by the step above, used directly.
+      - name: ruff check
+        run: .venv/bin/python -m ruff check .
+
+      - name: ruff format
+        run: .venv/bin/python -m ruff format --check src tests scripts
+
+      - name: mypy
+        run: .venv/bin/python -m mypy
+
+      - name: pytest
+        run: .venv/bin/python -m pytest -p no:warnings
+
+  measurement:
+    name: the measurement script still runs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: |
+          uv venv
+          uv pip install -e ".[dev,gateway]"
+
+      - name: Run the Phase 3 measurement over real sockets
+        # Writes to a scratch directory, never over the committed artifact: a
+        # number recorded in this repository was measured on named hardware,
+        # and a CI runner is not that hardware. This checks the script works,
+        # not what it reports - the gateway, the engine proxy and the metrics
+        # path are exercised end to end over loopback, which no unit test does.
+        run: .venv/bin/python scripts/measure_phase03.py --out "${RUNNER_TEMP}/phase03"
+
+      - name: Show what it measured
+        run: cat "${RUNNER_TEMP}/phase03/gateway-metrics.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: measurement-ci
+          path: ${{ runner.temp }}/phase03/gateway-metrics.json
+          if-no-files-found: error
+
+  deploy-config:
+    name: prometheus accepts the config and rules
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: |
+          uv venv
+          uv pip install -e ".[dev,gateway]"
+
+      - name: Install promtool
+        # The development machine has no Docker and no Prometheus, so these
+        # checks skip there. They must not skip here - this job is the only
+        # place Prometheus' own parser ever sees these files.
+        env:
+          PROM_VERSION: 2.55.1
+        run: |
+          set -euo pipefail
+          url="https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/prometheus.tar.gz
+          tar -xzf /tmp/prometheus.tar.gz -C /tmp
+          sudo install "/tmp/prometheus-${PROM_VERSION}.linux-amd64/promtool" /usr/local/bin/promtool
+          promtool --version
+
+      - name: promtool check rules
+        run: promtool check rules deploy/compose/prometheus/rules/inferstack.yml
+
+      - name: promtool check config
+        # This also validates the rule files, because rule_files is relative and
+        # Prometheus resolves it against the config's own directory.
+        run: promtool check config deploy/compose/prometheus/prometheus.yml
+
+      - name: Deploy configuration tests, with promtool present
+        run: .venv/bin/python -m pytest tests/test_deploy_config.py -p no:warnings -v

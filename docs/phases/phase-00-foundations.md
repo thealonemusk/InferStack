@@ -84,7 +84,10 @@ ruff format .   # clean
   guessing; the flags that matter are the ones seen inside WSL2 or the container.
 - No engine is installed yet. `vllm` sits behind the `engine` extra precisely so
   that `pip install -e .` keeps working on Windows.
-- No CI workflow yet; it arrives with Phase 1, when there is something to smoke test.
+- ~~No CI workflow yet; it arrives with Phase 1, when there is something to
+  smoke test.~~ It did not arrive in Phase 1. It arrived in Phase 3, once
+  there was something worth gating on beyond the unit tests - see
+  `.github/workflows/ci.yml`.
 
 ## Next
 

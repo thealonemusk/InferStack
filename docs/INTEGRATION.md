@@ -23,7 +23,7 @@ OpenAI-compatible HTTP, so it measures anything that does: vLLM, SGLang, TGI,
 llama.cpp's server, LM Studio, Ollama's OpenAI shim, or a hosted API.
 
 ```bash
-pip install git+https://github.com/thealonemusk/InferStack@phase-01-baseline-serving
+pip install git+https://github.com/thealonemusk/InferStack@phase-03-observability
 
 inferstack smoke \
   --base-url http://your-host:8000/v1 \
@@ -46,6 +46,42 @@ TTFT p95 under load             61 ms
 
 Verdict: requests are batched, well short of saturation
 ```
+
+### And if that endpoint is a vLLM, read its own signals too
+
+`smoke` measures the endpoint from outside. vLLM knows things no external
+measurement can reach — how many sequences are in the running batch right now,
+how many are queued behind them, how full the KV cache is, how often it has had
+to preempt — and it already exports them. No Prometheus, no Grafana, no agent:
+
+```bash
+inferstack metrics --url http://your-host:8000
+```
+
+Load is printed above latency deliberately: a p99 of 4 s means one thing at
+queue depth 60 and something entirely different at queue depth 0. Percentiles
+come from bucket counts using the same interpolation as Prometheus'
+`histogram_quantile`, so a number here and a number on a Grafana panel agree —
+and the output says out loud that they are no finer than the engine's own
+bucket boundaries.
+
+Note the port: `/metrics` is on the **engine**, not on a gateway in front of
+it. If a signal is missing from the output it is listed as missing rather than
+shown as zero, because an idle engine and a wrong URL otherwise render
+identically — and because that is how this project found it was asking vLLM for
+a TPOT metric by a name vLLM does not use.
+
+To capture a whole load episode rather than one instant — including from a
+session nothing outside can scrape:
+
+```bash
+inferstack metrics --url http://your-host:8000   --duration 60 --interval 0.2 --out run.jsonl
+```
+
+One JSON object per line, buckets included, so a percentile can be recomputed
+later. The summary reports output throughput from the *delta* between the first
+and last token counter; dividing a cumulative total by uptime would average in
+every idle second since the engine started.
 
 **Why this is worth running against a service you already own.** A serialised
 server and a batching one look identical from a single request. They diverge
@@ -114,7 +150,7 @@ changes by one line: the base URL.
 Start it:
 
 ```bash
-pip install "inferstack[engine] @ git+https://github.com/thealonemusk/InferStack@phase-01-baseline-serving"
+pip install "inferstack[engine] @ git+https://github.com/thealonemusk/InferStack@phase-03-observability"
 
 inferstack doctor --profile colab-t4      # confirm the box can run it
 inferstack serve  --profile colab-t4      # preflight, then launch
@@ -243,15 +279,30 @@ and no FP8 means int4 is your only quantisation route.
 
 Stated plainly so nothing below is a surprise:
 
-- **No authentication.** `serve` exposes an unauthenticated endpoint. Do not put
-  it on a public interface. API-key auth is Phase 2.
-- **No rate limiting or admission control.** An overloaded server will queue
-  until it times out. Phase 7.
-- **No metrics endpoint of our own.** vLLM's `/metrics` is there, but the
-  Prometheus/Grafana wiring is Phase 3.
-- **No multi-replica routing.** One engine per `serve`. Phase 7.
-- **Single concurrency point only.** `smoke` is a sanity check. Sweeps, Poisson
-  arrivals and percentile curves are Phase 4.
+- **`serve` on its own is unauthenticated.** vLLM's endpoint has no API-key
+  check; that lives in `inferstack gateway`, which must be put in front of it.
+  Do not expose `serve` directly. The gateway itself has now run in front of a
+  real vLLM on a T4 and costs about 7 ms of TTFT.
+- **No per-key rate limiting.** The gateway's admission control is *global*: a
+  fixed number of in-flight requests and a fast 429 beyond it. Per-key quotas
+  are Phase 7.
+- **No tracing.** Request ids reach the logs, but nothing correlates a single
+  request across the gateway and the engine. Deferred deliberately; see
+  ADR-0007.
+- **Metric names are confirmed against vLLM 0.29.0 only.** They come from a
+  capture, not a guess (`tests/fixtures/vllm_metrics_real.txt`), and older
+  spellings are accepted as aliases — but if `inferstack metrics` reports a
+  signal as *missing* against your engine, that is a version difference worth
+  reporting rather than an idle server.
+- **The compose stack's scrape targets are `host.docker.internal`.** Fine on
+  Docker Desktop, fine on Linux via the `extra_hosts` mapping, and wrong for
+  anything real: edit `deploy/compose/prometheus/prometheus.yml`.
+- **Alert thresholds are placeholders and say so.** A latency target is a
+  product decision; these are starting points, not SLOs.
+- **No multi-replica routing.** One engine per gateway. Phase 7.
+- **Single concurrency point only.** `smoke` is a closed-loop sanity check, so
+  it sends *fewer* requests when the server slows down. Poisson arrivals,
+  percentile curves and goodput are Phase 4.
 
-If you need auth and rate limiting today, put an existing reverse proxy in front
-— that is precisely what Phase 2 will replace.
+If you need per-key quotas today, keep an existing reverse proxy in front of the
+gateway — that part is Phase 7, not done.

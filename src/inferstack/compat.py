@@ -161,7 +161,10 @@ def check_profile(settings: Settings, report: EnvironmentReport) -> list[Issue]:
 
 def worst_severity(issues: list[Issue]) -> Severity | None:
     """Highest severity present, or ``None`` when the profile is clean."""
-    for level in ("error", "warning", "info"):
+    # Annotated rather than inferred as plain `str`, so the ordering that
+    # defines "worst" is checked against Severity instead of silenced.
+    ladder: tuple[Severity, ...] = ("error", "warning", "info")
+    for level in ladder:
         if any(i.severity == level for i in issues):
-            return level  # type: ignore[return-value]
+            return level
     return None

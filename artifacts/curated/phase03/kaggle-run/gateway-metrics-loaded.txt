@@ -1,0 +1,160 @@
+# HELP inferstack_gateway_requests_total Requests completed to the point of a response status.
+# TYPE inferstack_gateway_requests_total counter
+inferstack_gateway_requests_total{method="GET",route="/health",status="200",stream="false"} 2.0
+inferstack_gateway_requests_total{method="GET",route="/ready",status="200",stream="false"} 1.0
+inferstack_gateway_requests_total{method="GET",route="/metrics",status="200",stream="false"} 13.0
+inferstack_gateway_requests_total{method="GET",route="/v1/models",status="200",stream="false"} 1.0
+inferstack_gateway_requests_total{method="POST",route="/v1/chat/completions",status="200",stream="true"} 10.0
+# HELP inferstack_gateway_requests_created Requests completed to the point of a response status.
+# TYPE inferstack_gateway_requests_created gauge
+inferstack_gateway_requests_created{method="GET",route="/health",status="200",stream="false"} 1.7899019687312107e+09
+inferstack_gateway_requests_created{method="GET",route="/ready",status="200",stream="false"} 1.789901968735977e+09
+inferstack_gateway_requests_created{method="GET",route="/metrics",status="200",stream="false"} 1.7899019687394392e+09
+inferstack_gateway_requests_created{method="GET",route="/v1/models",status="200",stream="false"} 1.78990196884029e+09
+inferstack_gateway_requests_created{method="POST",route="/v1/chat/completions",status="200",stream="true"} 1.7899019689188352e+09
+# HELP inferstack_gateway_time_to_headers_seconds Request received to response headers sent. For a stream this is TTFT.
+# TYPE inferstack_gateway_time_to_headers_seconds histogram
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_count{route="/health",stream="false"} 2.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/health",stream="false"} 0.002637184000036541
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_count{route="/ready",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/ready",stream="false"} 0.003376833000061197
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_count{route="/metrics",stream="false"} 13.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/metrics",stream="false"} 0.02821275999997397
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/v1/models",stream="false"} 0.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_count{route="/v1/models",stream="false"} 1.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/v1/models",stream="false"} 0.006138841999927536
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.005",route="/v1/chat/completions",stream="true"} 0.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.01",route="/v1/chat/completions",stream="true"} 1.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.02",route="/v1/chat/completions",stream="true"} 3.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.04",route="/v1/chat/completions",stream="true"} 9.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.06",route="/v1/chat/completions",stream="true"} 9.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.08",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.1",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.15",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.25",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="0.5",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="1.0",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="2.5",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="5.0",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="10.0",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="30.0",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_bucket{le="+Inf",route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_count{route="/v1/chat/completions",stream="true"} 10.0
+inferstack_gateway_time_to_headers_seconds_sum{route="/v1/chat/completions",stream="true"} 0.290018180999823
+# HELP inferstack_gateway_time_to_headers_seconds_created Request received to response headers sent. For a stream this is TTFT.
+# TYPE inferstack_gateway_time_to_headers_seconds_created gauge
+inferstack_gateway_time_to_headers_seconds_created{route="/health",stream="false"} 1.7899019687312412e+09
+inferstack_gateway_time_to_headers_seconds_created{route="/ready",stream="false"} 1.7899019687360022e+09
+inferstack_gateway_time_to_headers_seconds_created{route="/metrics",stream="false"} 1.7899019687394588e+09
+inferstack_gateway_time_to_headers_seconds_created{route="/v1/models",stream="false"} 1.789901968840315e+09
+inferstack_gateway_time_to_headers_seconds_created{route="/v1/chat/completions",stream="true"} 1.7899019689188685e+09
+# HELP inferstack_gateway_stream_duration_seconds Request received to last chunk relayed, for streaming responses.
+# TYPE inferstack_gateway_stream_duration_seconds histogram
+inferstack_gateway_stream_duration_seconds_bucket{le="0.05",route="/v1/chat/completions"} 0.0
+inferstack_gateway_stream_duration_seconds_bucket{le="0.1",route="/v1/chat/completions"} 0.0
+inferstack_gateway_stream_duration_seconds_bucket{le="0.25",route="/v1/chat/completions"} 0.0
+inferstack_gateway_stream_duration_seconds_bucket{le="0.5",route="/v1/chat/completions"} 0.0
+inferstack_gateway_stream_duration_seconds_bucket{le="1.0",route="/v1/chat/completions"} 1.0
+inferstack_gateway_stream_duration_seconds_bucket{le="2.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="5.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="10.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="20.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="30.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="60.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="120.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="300.0",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_bucket{le="+Inf",route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_count{route="/v1/chat/completions"} 10.0
+inferstack_gateway_stream_duration_seconds_sum{route="/v1/chat/completions"} 10.598267453999824
+# HELP inferstack_gateway_stream_duration_seconds_created Request received to last chunk relayed, for streaming responses.
+# TYPE inferstack_gateway_stream_duration_seconds_created gauge
+inferstack_gateway_stream_duration_seconds_created{route="/v1/chat/completions"} 1.7899019700158944e+09
+# HELP inferstack_gateway_stream_chunks_total Chunks relayed downstream.
+# TYPE inferstack_gateway_stream_chunks_total counter
+inferstack_gateway_stream_chunks_total{route="/v1/chat/completions"} 614.0
+# HELP inferstack_gateway_stream_chunks_created Chunks relayed downstream.
+# TYPE inferstack_gateway_stream_chunks_created gauge
+inferstack_gateway_stream_chunks_created{route="/v1/chat/completions"} 1.789901970016014e+09
+# HELP inferstack_gateway_streams_disconnected_total Streams whose client hung up before the response finished.
+# TYPE inferstack_gateway_streams_disconnected_total counter
+# HELP inferstack_gateway_info Build and configuration of this gateway; the value is always 1.
+# TYPE inferstack_gateway_info gauge
+inferstack_gateway_info{engine_backend="vllm",model="qwen2.5-1.5b",profile="colab-t4",version="0.1.0"} 1.0
+# HELP inferstack_gateway_in_flight_requests Requests currently being served, including streams still relaying.
+# TYPE inferstack_gateway_in_flight_requests gauge
+inferstack_gateway_in_flight_requests 0.0
+# HELP inferstack_gateway_waiting_requests Requests waiting for an admission slot.
+# TYPE inferstack_gateway_waiting_requests gauge
+inferstack_gateway_waiting_requests 0.0
+# HELP inferstack_gateway_capacity_requests Configured maximum of concurrent requests.
+# TYPE inferstack_gateway_capacity_requests gauge
+inferstack_gateway_capacity_requests 512.0
+# HELP inferstack_gateway_admitted_total Requests granted an admission slot since start.
+# TYPE inferstack_gateway_admitted_total counter
+inferstack_gateway_admitted_total 10.0
+# HELP inferstack_gateway_rejected_total Requests shed with 429 because no slot became free in time.
+# TYPE inferstack_gateway_rejected_total counter
+inferstack_gateway_rejected_total 0.0

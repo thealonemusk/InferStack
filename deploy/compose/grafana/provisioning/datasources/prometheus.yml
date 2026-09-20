@@ -1,0 +1,17 @@
+# The datasource uid is fixed, not generated, because the dashboard JSON refers
+# to it by uid. A generated uid would provision cleanly and then render every
+# panel as "datasource not found".
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: inferstack-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      # Must match prometheus.yml's scrape_interval, or Grafana's $__rate_interval
+      # resolves to a window shorter than the scrape and every rate() goes empty.
+      timeInterval: 5s
+      httpMethod: POST
