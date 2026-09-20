@@ -4,11 +4,15 @@ This CLI, not a Makefile, is the project's control surface: the same commands
 run on a Windows laptop, inside a container and in a Colab cell, which is what
 keeps the development loop and the benchmark environment honest with each other.
 
-Phase 0 ships the commands needed before anything is served:
+The commands, in the order a session tends to use them:
 
     inferstack doctor              inspect the machine and validate a profile
     inferstack profiles            list available execution profiles
     inferstack config show         print fully resolved settings
+    inferstack serve               launch the engine
+    inferstack smoke               prove continuous batching is working
+    inferstack gateway             run the OpenAI-compatible edge
+    inferstack metrics             read the engine's Prometheus signals
 """
 
 from __future__ import annotations
@@ -16,9 +20,11 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -40,6 +46,13 @@ from inferstack.engine.smoke import (
     run_smoke,
 )
 from inferstack.logging import configure_logging
+from inferstack.observability.engine import (
+    ENGINE_SIGNALS,
+    AmbiguousSignalError,
+    EngineSnapshot,
+    metrics_url,
+    scrape_engine,
+)
 from inferstack.probe import EnvironmentReport, probe_environment
 from inferstack.version import __version__
 
@@ -57,6 +70,7 @@ err_console = Console(stderr=True)
 
 SEVERITY_STYLE = {"error": "bold red", "warning": "yellow", "info": "cyan"}
 SEVERITY_ICON = {"error": "FAIL", "warning": "WARN", "info": "NOTE"}
+NEWLINE = chr(10)  # written explicitly: a JSONL record is one line
 
 
 def _bool_cell(value: bool) -> str:
@@ -588,6 +602,285 @@ def gateway(
         reload=reload,
         log_config=None,  # structlog owns logging; uvicorn's would fight it
     )
+
+
+def _fmt_seconds(value: float | None) -> str:
+    """Seconds, rendered in the unit a human reads without converting."""
+    if value is None:
+        return "[dim]-[/dim]"
+    if value < 1.0:
+        return f"{value * 1000:.1f} ms"
+    return f"{value:.2f} s"
+
+
+def _fmt_count(value: float | None) -> str:
+    if value is None:
+        return "[dim]not exported[/dim]"
+    return f"{value:,.0f}" if value == int(value) else f"{value:,.2f}"
+
+
+def _render_snapshot(snapshot: EngineSnapshot) -> None:
+    """Present a scrape: load first, then latency, then what was absent.
+
+    Load comes first on purpose. A p99 of 4 s means one thing with a queue
+    depth of 60 and something entirely different with a queue depth of 0, and
+    reading the latency before the load invites the wrong diagnosis.
+    """
+    load = Table(box=None, padding=(0, 2, 0, 0))
+    load.add_column("Signal")
+    load.add_column("Value", justify="right")
+    load.add_column("Reads as", style="dim")
+
+    running = snapshot.running
+    waiting = snapshot.waiting
+    usage = snapshot.kv_cache_usage
+    preemptions = snapshot.preemptions
+
+    load.add_row("Running batch", _fmt_count(running), "sequences decoding now")
+    queue_note = "requests queued ahead of the batch"
+    if waiting is not None and waiting > 0:
+        queue_note = "[yellow]queueing: latency is about to rise[/yellow]"
+    load.add_row("Queue depth", _fmt_count(waiting), queue_note)
+
+    if usage is None:
+        load.add_row("KV cache", "[dim]not exported[/dim]", "")
+    else:
+        cache_note = "headroom for more concurrency"
+        if usage >= 0.9:
+            cache_note = "[red]near full: preemption is next[/red]"
+        elif usage >= 0.7:
+            cache_note = "[yellow]filling[/yellow]"
+        load.add_row("KV cache", f"{usage * 100:.1f}%", cache_note)
+
+    preempt_note = "recompute on eviction; source of p99 spikes"
+    if preemptions:
+        preempt_note = "[red]the engine has been evicting sequences[/red]"
+    load.add_row("Preemptions", _fmt_count(preemptions), preempt_note)
+
+    console.print(Panel(load, title="Load", title_align="left", border_style="blue"))
+
+    if snapshot.histograms:
+        latency = Table(box=None, padding=(0, 2, 0, 0))
+        latency.add_column("Histogram")
+        latency.add_column("count", justify="right")
+        latency.add_column("p50", justify="right")
+        latency.add_column("p90", justify="right")
+        latency.add_column("p99", justify="right")
+        latency.add_column("mean", justify="right", style="dim")
+
+        for signal in ENGINE_SIGNALS:
+            view = snapshot.histograms.get(signal.key)
+            if view is None:
+                continue
+            latency.add_row(
+                signal.key,
+                _fmt_count(view.count),
+                _fmt_seconds(view.quantile(0.50)),
+                _fmt_seconds(view.quantile(0.90)),
+                _fmt_seconds(view.quantile(0.99)),
+                _fmt_seconds(view.mean),
+            )
+
+        console.print(Panel(latency, title="Latency", title_align="left", border_style="blue"))
+        console.print(
+            "[dim]Percentiles are interpolated from bucket counts, so they are no finer "
+            "than the engine's bucket boundaries. The mean is exact - and hides the tail.[/dim]"
+        )
+
+    tokens = [
+        ("Prompt tokens", snapshot.values.get("prompt_tokens")),
+        ("Generation tokens", snapshot.values.get("generation_tokens")),
+    ]
+    if any(value is not None for _, value in tokens):
+        totals = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+        totals.add_column(style="dim")
+        totals.add_column(justify="right")
+        for label, value in tokens:
+            totals.add_row(label, _fmt_count(value))
+        console.print(Panel(totals, title="Cumulative", title_align="left", border_style="blue"))
+
+    if snapshot.missing:
+        console.print(f"[dim]Not exported by this engine: {', '.join(snapshot.missing)}[/dim]")
+
+
+def _parse_labels(pairs: list[str]) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key:
+            err_console.print(f"[bold red]--label expects key=value, got {pair!r}[/bold red]")
+            raise typer.Exit(2)
+        labels[key] = value
+    return labels
+
+
+async def _scrape_once(url: str, labels: dict[str, str]) -> EngineSnapshot:
+    return await scrape_engine(url, labels=labels)
+
+
+async def _sample(
+    url: str, labels: dict[str, str], duration_s: float, interval_s: float, out: Path
+) -> list[EngineSnapshot]:
+    """Scrape repeatedly, appending each snapshot to a JSONL file.
+
+    This exists because the deployment that most needs metrics is the one
+    Prometheus cannot reach. A Kaggle session has no public ingress (ADR-0005),
+    so the way a run's signals survive it is a file written from inside the
+    session and fetched afterwards.
+    """
+    out.parent.mkdir(parents=True, exist_ok=True)
+    snapshots: list[EngineSnapshot] = []
+
+    # One client for the whole run. Building and tearing one down per sample
+    # pays a connection setup every time, and that cost lands inside the
+    # sampling interval: samples end up further apart than asked for, and the
+    # extra gap looks like the engine being slow to answer.
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        # The window starts here, not at the top of the function. Constructing
+        # the client loads a TLS trust store, which measured 0.9 s on this
+        # machine - long enough that a 0.6 s window was spent before the first
+        # scrape and the sampler returned a single sample.
+        deadline = time.monotonic() + duration_s
+        with out.open("a", encoding="utf-8") as handle:
+            while True:
+                started = time.monotonic()
+                snapshot = await scrape_engine(url, labels=labels, client=client)
+                snapshots.append(snapshot)
+                handle.write(json.dumps(snapshot.to_dict()) + NEWLINE)
+                handle.flush()  # a session that dies mid-run must still leave data
+
+                cache = snapshot.kv_cache_usage
+                console.print(
+                    f"[dim]{len(snapshots):>4}[/dim]  running={_fmt_count(snapshot.running)}  "
+                    f"waiting={_fmt_count(snapshot.waiting)}  "
+                    f"kv={'-' if cache is None else f'{cache:.1%}'}"
+                )
+
+                # Sleep the remainder of the interval rather than the whole of
+                # it, so the scrape's own duration does not stretch the spacing
+                # and turn a requested 1 s sample rate into 1.5 s.
+                remaining = max(interval_s - (time.monotonic() - started), 0.0)
+                if time.monotonic() + remaining > deadline:
+                    break
+                if remaining:
+                    await asyncio.sleep(remaining)
+
+    return snapshots
+
+
+def _render_sampling_summary(snapshots: list[EngineSnapshot]) -> None:
+    """Report what changed over the window, not just the last reading."""
+    if len(snapshots) < 2:
+        return
+
+    first, last = snapshots[0], snapshots[-1]
+    elapsed = last.scraped_at - first.scraped_at
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    table.add_column(style="dim")
+    table.add_column(justify="right")
+    table.add_row("Samples", str(len(snapshots)))
+    table.add_row("Window", f"{elapsed:.1f} s")
+
+    peak_wait = max((s.waiting for s in snapshots if s.waiting is not None), default=None)
+    peak_batch = max((s.running for s in snapshots if s.running is not None), default=None)
+    peak_cache = max(
+        (s.kv_cache_usage for s in snapshots if s.kv_cache_usage is not None), default=None
+    )
+    if peak_batch is not None:
+        table.add_row("Peak running batch", _fmt_count(peak_batch))
+    if peak_wait is not None:
+        table.add_row("Peak queue depth", _fmt_count(peak_wait))
+    if peak_cache is not None:
+        table.add_row("Peak KV cache", f"{peak_cache * 100:.1f}%")
+
+    # Counter deltas are the only honest throughput: a cumulative total divided
+    # by uptime would average in every idle second since the engine started.
+    generated = last.values.get("generation_tokens")
+    started_with = first.values.get("generation_tokens")
+    if generated is not None and started_with is not None and elapsed > 0:
+        table.add_row("Output throughput", f"{(generated - started_with) / elapsed:.1f} tok/s")
+
+    preempted_now = last.values.get("preemptions")
+    preempted_then = first.values.get("preemptions")
+    if preempted_now is not None and preempted_then is not None:
+        table.add_row("Preemptions in window", _fmt_count(preempted_now - preempted_then))
+
+    console.print(Panel(table, title="Over the window", title_align="left", border_style="green"))
+
+
+@app.command()
+def metrics(
+    profile: Annotated[str | None, typer.Option("--profile", "-p")] = None,
+    url: Annotated[
+        str | None,
+        typer.Option("--url", help="Engine root, /v1 base URL, or metrics URL."),
+    ] = None,
+    label: Annotated[
+        list[str] | None,
+        typer.Option("--label", help="Narrow a multi-series metric, e.g. model_name=Qwen/x."),
+    ] = None,
+    duration: Annotated[
+        float, typer.Option("--duration", help="Sample for this many seconds instead of once.")
+    ] = 0.0,
+    interval: Annotated[float, typer.Option("--interval", help="Seconds between samples.")] = 1.0,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="JSONL file for sampled snapshots.")
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Read an inference engine's Prometheus metrics and summarise them.
+
+    Works against this project's engine and against any other vLLM, with no
+    Prometheus and no Grafana:
+
+        inferstack metrics --url http://your-host:8000
+
+    Percentiles are computed from bucket counts the same way Prometheus'
+    histogram_quantile does, so these numbers and a Grafana panel agree.
+
+    With --duration it samples instead of reading once, appending each snapshot
+    to a JSONL file. That is how a run's signals survive a GPU session
+    Prometheus cannot reach.
+    """
+    settings = _load_or_exit(profile)
+    target = url or settings.engine.base_url
+    labels = _parse_labels(label or [])
+
+    try:
+        if duration > 0:
+            destination = out or (
+                settings.bench.artifacts_dir / f"metrics-{int(time.time())}.jsonl"
+            )
+            snapshots = asyncio.run(_sample(target, labels, duration, interval, destination))
+            _render_sampling_summary(snapshots)
+            console.print(f"[dim]{len(snapshots)} snapshots written to {destination}[/dim]")
+            snapshot = snapshots[-1]
+        else:
+            snapshot = asyncio.run(_scrape_once(target, labels))
+    except AmbiguousSignalError as exc:
+        err_console.print(f"[bold red]{exc}[/bold red]")
+        err_console.print("[dim]Add --label key=value to pick one series.[/dim]")
+        raise typer.Exit(1) from exc
+    except httpx.HTTPError as exc:
+        err_console.print(f"[bold red]Could not scrape {metrics_url(target)}: {exc}[/bold red]")
+        err_console.print(
+            "[dim]The engine exposes /metrics on its own port, not through the gateway.[/dim]"
+        )
+        raise typer.Exit(1) from exc
+
+    if as_json:
+        console.print_json(json.dumps(snapshot.to_dict()))
+    else:
+        console.print(f"[dim]{snapshot.url}[/dim]")
+        _render_snapshot(snapshot)
+
+    if snapshot.is_empty:
+        err_console.print(
+            "[bold red]That endpoint exposed none of vLLM's metrics.[/bold red] "
+            f"It answered with {snapshot.sample_count} sample(s), none of them recognised - "
+            "so this is probably not an inference engine's metrics endpoint."
+        )
+        raise typer.Exit(1)
 
 
 @app.command()

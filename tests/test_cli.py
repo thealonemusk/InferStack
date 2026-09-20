@@ -7,6 +7,8 @@ of the contract, not a detail.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -144,3 +146,155 @@ def test_smoke_falls_back_to_the_profile_model(monkeypatch: pytest.MonkeyPatch) 
 
     assert captured["model"] == "qwen2.5-1.5b"
     assert captured["api_key"] is None
+
+
+# --- metrics --------------------------------------------------------------
+#
+# The command is the answer to "what is the engine doing right now" on a
+# machine with no Prometheus and no Grafana, so its exit codes and its JSON
+# are part of the contract in the same way doctor's are.
+
+METRICS_FIXTURE = Path(__file__).parent / "fixtures" / "vllm_metrics.txt"
+
+
+def _fixture_snapshot(**overrides: object):
+    from inferstack.observability.engine import snapshot_from_text
+
+    snapshot = snapshot_from_text(
+        METRICS_FIXTURE.read_text(encoding="utf-8"), url="http://engine:8000/metrics"
+    )
+    if overrides:
+        return replace(snapshot, **overrides)
+    return snapshot
+
+
+def _patch_scrape(monkeypatch: pytest.MonkeyPatch, result: object) -> dict:
+    """Capture what the command asked for, and answer with ``result``."""
+    captured: dict = {}
+
+    async def fake_scrape(base: str, **kwargs: object):
+        captured["base"] = base
+        captured.update(kwargs)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr("inferstack.cli.scrape_engine", fake_scrape)
+    return captured
+
+
+def test_metrics_leads_with_load_then_latency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Load first: a p99 of 4 s means different things at queue depth 60 and 0."""
+    _patch_scrape(monkeypatch, _fixture_snapshot())
+    result = runner.invoke(app, ["metrics"])
+
+    assert result.exit_code == 0, result.stdout
+    assert result.stdout.index("Running batch") < result.stdout.index("p99")
+    for signal in ("Running batch", "Queue depth", "KV cache", "Preemptions"):
+        assert signal in result.stdout
+
+
+def test_metrics_json_carries_the_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The buckets, not just the percentiles: a percentile is recomputable, a
+    rendered table is not."""
+    _patch_scrape(monkeypatch, _fixture_snapshot())
+    result = runner.invoke(app, ["metrics", "--json"])
+
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["values"]["running"] == 8.0
+    assert payload["histograms"]["ttft"]["buckets"][-1][0] == "+Inf"
+
+
+def test_metrics_defaults_to_the_profiles_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _patch_scrape(monkeypatch, _fixture_snapshot())
+    runner.invoke(app, ["metrics", "--profile", "colab-t4"])
+    assert captured["base"] == "http://127.0.0.1:8000/v1"
+
+
+def test_metrics_measures_somebody_elses_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _patch_scrape(monkeypatch, _fixture_snapshot())
+    result = runner.invoke(app, ["metrics", "--url", "http://their-host:8000"])
+    assert result.exit_code == 0, result.stdout
+    assert captured["base"] == "http://their-host:8000"
+
+
+def test_metrics_passes_label_filters_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _patch_scrape(monkeypatch, _fixture_snapshot())
+    runner.invoke(app, ["metrics", "--label", "model_name=Qwen/x", "--label", "engine=0"])
+    assert captured["labels"] == {"model_name": "Qwen/x", "engine": "0"}
+
+
+def test_metrics_rejects_a_label_that_is_not_a_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_scrape(monkeypatch, _fixture_snapshot())
+    result = runner.invoke(app, ["metrics", "--label", "model_name"])
+    assert result.exit_code == 2  # usage error, not a runtime failure
+
+
+def test_metrics_exits_nonzero_when_the_engine_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    _patch_scrape(monkeypatch, httpx.ConnectError("refused"))
+    result = runner.invoke(app, ["metrics"])
+    assert result.exit_code == 1
+    assert "Could not scrape" in result.stderr
+
+
+def test_metrics_says_so_when_the_endpoint_is_not_an_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An idle engine and a wrong URL both render as zeroes otherwise."""
+    from inferstack.observability.engine import EngineSnapshot
+
+    _patch_scrape(monkeypatch, EngineSnapshot(url="http://nope/metrics", scraped_at=1.0))
+    result = runner.invoke(app, ["metrics", "--url", "http://nope"])
+    assert result.exit_code == 1
+    assert "none of vLLM's metrics" in result.stderr
+
+
+def test_metrics_tells_you_how_to_resolve_an_ambiguous_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from inferstack.observability.engine import AmbiguousSignalError
+
+    _patch_scrape(
+        monkeypatch,
+        AmbiguousSignalError("running", "vllm:num_requests_running", [{"model_name": "a"}, {}]),
+    )
+    result = runner.invoke(app, ["metrics"])
+    assert result.exit_code == 1
+    assert "--label" in result.stderr
+
+
+def test_metrics_sampling_writes_one_json_object_per_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A GPU session Prometheus cannot reach still has to leave its signals behind."""
+    tokens = iter(range(1000, 100000, 1000))
+
+    async def fake_scrape(base: str, **kwargs: object):
+        snapshot = _fixture_snapshot()
+        values = dict(snapshot.values)
+        values["generation_tokens"] = float(next(tokens))
+        return replace(snapshot, values=values)
+
+    monkeypatch.setattr("inferstack.cli.scrape_engine", fake_scrape)
+    out = tmp_path / "runs" / "metrics.jsonl"
+
+    result = runner.invoke(
+        app,
+        ["metrics", "--duration", "0.6", "--interval", "0.05", "--out", str(out)],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert len(lines) >= 2
+    for line in lines:
+        assert json.loads(line)["values"]["running"] == 8.0
+
+    # Throughput has to come from the delta between samples: a cumulative
+    # counter divided by uptime averages in every idle second since start.
+    assert "Output throughput" in result.stdout
+    assert "Over the window" in result.stdout
