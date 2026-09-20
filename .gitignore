@@ -29,7 +29,10 @@ huggingface/
 # output. Committing either would duplicate the source or the artifacts.
 kernel-build*/
 kaggle-out*/
+# Working directories for scripts/verify_observability.py. The name changed
+# once; both are ignored so a stale one cannot be committed by accident.
 .stack-verify/
+.prometheus-verify/
 
 # Benchmark artifacts: raw runs are local, curated results are committed
 artifacts/runs/
