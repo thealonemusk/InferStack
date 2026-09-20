@@ -431,7 +431,7 @@ pre-commit install  # run both on every commit
 - [Phase 2 — The gateway](docs/phases/phase-02-gateway.md) — auth, streaming pass-through, admission control
 - [Phase 3 — Observability](docs/phases/phase-03-observability.md) — the four signals, histograms not averages, and what the instrumentation costs
 - [Phase 4 — The benchmark harness](docs/phases/phase-04-bench.md) — open-loop load, goodput, and the curve
-- **[docs/REVIEW.md](docs/REVIEW.md)** — reading order for the stacked branches, if you are reviewing this
+- **[docs/REVIEW.md](docs/REVIEW.md)** — where to start reading, if 27,000 lines is not an inviting front door
 - [Architecture decision records](docs/adr/)
 
 ## Licence
