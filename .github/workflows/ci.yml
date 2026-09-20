@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
@@ -55,17 +55,22 @@ jobs:
           uv venv --python ${{ matrix.python }}
           uv pip install -e ".[dev,gateway]"
 
+      # Called through the venv's own interpreter rather than `uv run`.
+      # `uv run` treats this directory as a project and re-resolves against
+      # uv.lock, which on 3.11 produced an environment with no ruff in it and
+      # an exit code 2 that read as a lint failure. One environment, built
+      # once by the step above, used directly.
       - name: ruff check
-        run: uv run ruff check .
+        run: .venv/bin/python -m ruff check .
 
       - name: ruff format
-        run: uv run ruff format --check src tests scripts
+        run: .venv/bin/python -m ruff format --check src tests scripts
 
       - name: mypy
-        run: uv run mypy
+        run: .venv/bin/python -m mypy
 
       - name: pytest
-        run: uv run pytest -p no:warnings
+        run: .venv/bin/python -m pytest -p no:warnings
 
   measurement:
     name: the measurement script still runs
@@ -75,7 +80,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
@@ -90,7 +95,7 @@ jobs:
         # and a CI runner is not that hardware. This checks the script works,
         # not what it reports - the gateway, the engine proxy and the metrics
         # path are exercised end to end over loopback, which no unit test does.
-        run: uv run python scripts/measure_phase03.py --out "${RUNNER_TEMP}/phase03"
+        run: .venv/bin/python scripts/measure_phase03.py --out "${RUNNER_TEMP}/phase03"
 
       - name: Show what it measured
         run: cat "${RUNNER_TEMP}/phase03/gateway-metrics.json"
@@ -109,7 +114,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
@@ -141,4 +146,4 @@ jobs:
         run: promtool check config deploy/compose/prometheus/prometheus.yml
 
       - name: Deploy configuration tests, with promtool present
-        run: uv run pytest tests/test_deploy_config.py -p no:warnings -v
+        run: .venv/bin/python -m pytest tests/test_deploy_config.py -p no:warnings -v
