@@ -1,0 +1,79 @@
+{
+  "measured_at": "2026-09-20T10:26:56+00:00",
+  "chunk_count": 5,
+  "chunk_delay_ms": 200.0,
+  "stream_direct": {
+    "repeats": 5,
+    "ttfb_ms": 5.53,
+    "total_ms": 1016.65,
+    "ttfb_ms_all": [
+      6.47,
+      5.57,
+      4.2,
+      5.53,
+      5.42
+    ],
+    "chunks": 6
+  },
+  "stream_gateway_metrics_on": {
+    "repeats": 5,
+    "ttfb_ms": 13.31,
+    "total_ms": 1033.13,
+    "ttfb_ms_all": [
+      9.57,
+      24.63,
+      13.31,
+      11.43,
+      16.68
+    ],
+    "chunks": 6
+  },
+  "stream_gateway_metrics_off": {
+    "repeats": 5,
+    "ttfb_ms": 12.96,
+    "total_ms": 1029.07,
+    "ttfb_ms_all": [
+      12.09,
+      9.8,
+      12.96,
+      18.5,
+      18.94
+    ],
+    "chunks": 6
+  },
+  "fast_direct": {
+    "n": 300,
+    "p50_ms": 7.216,
+    "p95_ms": 9.602,
+    "mean_ms": 7.265
+  },
+  "fast_metrics_on": {
+    "n": 300,
+    "p50_ms": 16.018,
+    "p95_ms": 20.018,
+    "mean_ms": 16.174
+  },
+  "fast_metrics_off": {
+    "n": 300,
+    "p50_ms": 17.04,
+    "p95_ms": 24.968,
+    "mean_ms": 17.95
+  },
+  "scrape": {
+    "payload_bytes": 9026,
+    "series": 67,
+    "p50_ms": 8.931,
+    "p95_ms": 12.023
+  },
+  "under_load": {
+    "concurrent_streams": 8,
+    "in_flight_mid_load": 8.0,
+    "waiting_mid_load": 0.0,
+    "capacity": 512.0,
+    "ttfb_p50_ms": 151.88,
+    "total_p50_ms": 1188.52,
+    "in_flight_after": 0.0,
+    "admitted_total": 324.0,
+    "rejected_total": 0.0
+  }
+}
