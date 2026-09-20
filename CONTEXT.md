@@ -23,16 +23,16 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 
 | | |
 |---|---|
-| Active branch | `phase-03-observability` (9 commits ahead of `phase-02-gateway`) |
+| Active branch | `phase-04-bench` |
 | Also pushed | `phase-00-foundations` (2), `phase-01-baseline-serving` (19), `phase-02-gateway` (27) |
 | Pushed | all four phase branches, including `phase-03-observability` |
 | `main` | still the initial commit — **nothing merged yet** |
-| Tests | **302**, all passing (2 skip without `promtool`) |
+| Tests | **364**, all passing (2 skip without `promtool`) |
 | Lint | `ruff check` and `ruff format --check` both clean (incl. bandit `S`, blind-except `BLE`) |
 | Types | `mypy` **clean**, 30 source files |
 | CI | `.github/workflows/ci.yml` — **green**. lint, types, tests on 3.11 + 3.12; the measurement script over real sockets; promtool over config and rules |
-| Phases done | 0, 1, 2, 3 — **all verified on real hardware** |
-| Phase next | **4 — benchmark harness (open-loop load)** |
+| Phases done | 0, 1, 2, 3, 4 — **all verified on real hardware** |
+| Phase next | **5 — tuning: the two knobs, against the Phase 4 curve** |
 
 Branches stack: each phase branch is cut from the previous one —
 `phase-03-observability` from `phase-02-gateway` from `phase-01-baseline-serving`
@@ -255,7 +255,15 @@ src/inferstack/
     kernels/serve_smoke.py   full Phase 1 run, unattended
     kernels/gateway_metrics.py  PHASE 3: engine + gateway + load +
                              scrape both, unattended. ~9 min.
-  bench/                   EMPTY - Phase 4
+    kernels/bench_sweep.py   PHASE 4: engine + open-loop rate ladder +
+                             charts, unattended. ~40 min.
+  bench/                   PHASE 4 - complete
+    arrivals.py            Poisson schedule, computed before the run
+    load.py                open-loop runner; records BOTH clocks
+    report.py              goodput, SLO attainment, saturation
+    records.py             replay a finished run against another SLO
+    sweep.py               the rate ladder, with engine sampling
+    plots.py               the four panels and the hero chart
 deploy/compose/            docker-compose, prometheus.yml, rules/,
                            grafana provisioning + dashboard JSON.
                            VERIFIED by running prometheus + grafana.
@@ -268,9 +276,10 @@ artifacts/curated/         phase01/, phase02/, phase03/ - committed results
 CONTEXT.md                 this file
 docs/PROJECT-GUIDE.md      theory, architecture, defence (1018 lines)
 docs/INTEGRATION.md        how to plug into an existing workflow
-docs/adr/                  ADR-0001..0007
-docs/phases/               phase-00 .. phase-03 records
-tests/                     302 tests
+docs/adr/                  ADR-0001..0008
+docs/REVIEW.md             reading order for the stacked branches
+docs/phases/               phase-00 .. phase-04 records
+tests/                     364 tests
   fixtures/vllm_metrics.txt       SYNTHETIC - hand-computable bucket maths
   fixtures/vllm_metrics_real.txt  CAPTURE from a real vLLM 0.29.0. The
                            authority on names, labels and buckets.
@@ -294,6 +303,16 @@ tests/                     302 tests
 - **ADR-0006** — the **gateway is a pass-through**, not a translation layer.
   Bodies forwarded unmodified; declaring a schema here would be a second copy of
   vLLM's fast-moving surface, and it is the copy that would be wrong.
+- **ADR-0008** — **load is open-loop, capacity is goodput.** Arrivals follow a
+  Poisson schedule computed *before* the run, so offered load cannot adapt to
+  how the server is coping. Every record carries two clocks - latency from the
+  send, and latency from when the request was *due* - because a generator that
+  falls behind has already cost the user time nobody recorded (coordinated
+  omission). Capacity is reported as goodput against a stated SLO, attainment is
+  measured against requests *sent*, and the sustainable rate stops at the first
+  unhealthy step rather than taking the best point on the curve. Sweeps bypass
+  the gateway: the subject is engine capacity, and admission control sheds load
+  at exactly the rates being characterised.
 - **ADR-0007** — **metrics are pulled per component, and reported as
   distributions.** Prometheus scrapes the gateway and the engine separately; the
   gateway never forwards the engine's metrics (a proxied scrape makes the
@@ -413,6 +432,24 @@ Each cost a real debugging cycle. Re-learning them is pure waste.
     version-specific and was not. Call the venv's interpreter directly.
 25. **`setup-uv@v3` cache returns HTTP 400 on current runners.** Harmless
     warning, but it makes every run look half-broken. v6 is current.
+
+26. **`max_tokens` is a ceiling, not a target, and a benchmark needs a target.**
+    The first Phase 4 sweep produced a perfectly flat curve because the prompt
+    asked the model to "summarise in one word" and it complied: every response
+    was exactly 3 tokens, so decode never ran and there was no knee to find. The
+    tell was 96 output tokens/s at 32 req/s. Pin output length with
+    `ignore_eos: true` (a vLLM extension, forwarded because ADR-0006 makes the
+    gateway a pass-through) and *check throughput against the arrival rate*
+    before believing a flat curve.
+27. **Every validity check can pass while the workload is wrong.** That run had
+    Poisson arrivals, a generator that kept up to 16 ms, honest percentiles and
+    a drained engine between steps. Nothing guards what you *asked the engine
+    to do*.
+28. **Arrival rate and completion rate have different denominators.** Arrivals
+    happen inside the schedule window; completions trail past it. Comparing
+    `completed/wall` against `arrivals/window` makes a healthy server look like
+    it is falling behind by exactly its own drain time. Rates are per second of
+    offered load; health is judged by latency and failures instead.
 
 **The meta-lesson, now hit four times** (Phase 1 flag drift, Phase 2 admission
 scope, Phase 2 logging, Phase 3 metric name): *code exercised only by mocks is
