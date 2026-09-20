@@ -341,7 +341,7 @@ scripts/          the measurement and verification scripts behind the artifacts
 .github/workflows/ CI: lint, types, tests, the measurement, promtool
 docs/adr/         architecture decision records
 docs/phases/      what each phase built and how to verify it
-tests/            302 tests
+tests/            364 tests
 ```
 
 ### The four ideas that hold it together
@@ -416,7 +416,7 @@ vLLM already exports Prometheus metrics. The ones that matter:
 | Metric | Tells you |
 |---|---|
 | `vllm:num_requests_running` | Current batch size — is the batch actually filling? |
-| `vllm:num_requests_waiting` | Queue depth — the leading indicator of latency pain |
+| `vllm:num_requests_waiting` | Queue depth — the leading indicator of latency pain, **when `max_num_seqs` is smaller than the batch the GPU can drive**. See below |
 | `vllm:gpu_cache_usage_perc` | KV cache pressure; near 100% means preemption is next |
 | `vllm:num_preemptions_total` | Where p99 spikes come from |
 | `vllm:time_to_first_token_seconds` | TTFT histogram |
@@ -428,6 +428,13 @@ shipped asking for `vllm:time_per_output_token_seconds`, which 0.29.0 does not
 emit; §7.10 has what that cost. The last two rows are different questions, not
 synonyms: a tail in ITL that TPOT does not show means the stutter is inside
 requests rather than between them.
+
+**That queue-depth caveat is not hypothetical.** Phase 4 measured queue depth
+at **zero** through a goodput collapse from 13.54 to 4.25 req/s, because
+`max_num_seqs=256` lets vLLM admit almost everything into the running batch
+instead of queueing it. The signal that moved was the running batch, 4 → 100.
+Watch both, and know which regime you are in: queueing means the cap is
+binding, a growing batch with an empty queue means the GPU is.
 
 **Why histograms rather than averages.** Latency distributions are heavy-tailed.
 A mean TTFT of 200 ms is compatible with a p99 of 8 seconds, and the p99 is what
@@ -1010,9 +1017,10 @@ feature rather than a debugging afternoon.
 > and Grafana both started against the committed configuration. CI runs lint,
 > types, tests, the measurement script and promtool.
 >
-> What is genuinely missing is Phase 4 onwards: there is still exactly one
-> concurrency point, closed-loop, so no latency-versus-arrival-rate curve and no
-> goodput. Then tuning, quantisation, routing, the SGLang comparison and the
+> What is genuinely missing is Phase 5 onwards: nothing has been *tuned*. The
+> Phase 4 curve describes the profile exactly as Phase 1 left it, with one
+> workload and one run per rate, so there are no error bars and no Pareto
+> frontier yet. Then quantisation, routing, the SGLang comparison and the
 > report.
 
 **"What is the weakest part of the project right now?"**
@@ -1179,7 +1187,7 @@ inferstack doctor --profile colab-t4 --strict
 Run the checks:
 
 ```bash
-pytest              # 302 tests
+pytest              # 364 tests
 ruff check .        # lint (incl. bandit security rules)
 ```
 

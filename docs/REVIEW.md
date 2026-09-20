@@ -133,7 +133,7 @@ Run this on any branch; it is what CI runs:
 
 ```bash
 uv venv && uv pip install -e ".[dev,gateway,bench]"
-pytest -p no:warnings        # 352 tests, ~70s
+pytest -p no:warnings        # 364 tests, ~70s
 ruff check . && ruff format --check src tests scripts
 mypy
 ```

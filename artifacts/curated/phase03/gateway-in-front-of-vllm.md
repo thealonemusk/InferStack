@@ -127,6 +127,10 @@ the stutter is inside requests rather than between them.
 - **One concurrency point, closed-loop.** Exactly as Phase 1. No arrival rates,
   no percentile curves, no goodput. That is Phase 4 and this run does not
   anticipate it.
+
+  → **Closed** the same day: `../phase04/sweep.md`. Worth reading against this
+  file, because the sweep found queue depth flat at zero through a goodput
+  collapse — the signal §3 above records at 8 and treats as meaningful.
 - **No paired comparison.** The Phase 1 and Phase 3 columns in §2 come from
   different sessions. A proper gateway-cost measurement would run both paths in
   the same session, interleaved.
