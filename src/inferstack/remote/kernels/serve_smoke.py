@@ -22,7 +22,10 @@ import time
 from pathlib import Path
 
 REPO = "https://github.com/thealonemusk/InferStack"
-BRANCH = os.environ.get("INFERSTACK_BRANCH", "phase-01-baseline-serving")
+# Bump this every phase, and keep it equal to the other kernels' default -
+# a kernel that installs a stale branch measures code nobody is working on.
+# tests/test_kernels.py asserts the kernels agree.
+BRANCH = os.environ.get("INFERSTACK_BRANCH", "phase-03-observability")
 PROFILE = os.environ.get("INFERSTACK_PROFILE", "colab-t4")
 CONCURRENCY = int(os.environ.get("INFERSTACK_CONCURRENCY", "8"))
 MAX_TOKENS = int(os.environ.get("INFERSTACK_MAX_TOKENS", "64"))
