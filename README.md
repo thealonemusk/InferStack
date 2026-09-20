@@ -78,6 +78,42 @@ gate that catches config regressions a health check never would:
 - run: inferstack smoke --base-url ${{ vars.INFERENCE_URL }} --model ${{ vars.MODEL_ID }} -c 16
 ```
 
+And if the thing you already run is a vLLM, you can read its own signals the
+same way — no Prometheus, no Grafana, no agent:
+
+```bash
+inferstack metrics --url http://your-host:8000
+```
+
+```
++- Load ----------------------------------------------------------+
+| Signal         Value  Reads as                                  |
+| Running batch      8  sequences decoding now                    |
+| Queue depth        0  requests queued ahead of the batch        |
+| KV cache        1.3%  headroom for more concurrency             |
+| Preemptions        0  recompute on eviction; p99 spikes live here|
++-----------------------------------------------------------------+
++- Latency -------------------------------------------------------+
+| Histogram    count       p50      p90      p99     mean         |
+| ttft             9   57.5 ms  75.5 ms  79.6 ms  54.4 ms         |
+| tpot             9   17.5 ms  23.5 ms  24.9 ms  14.6 ms         |
++-----------------------------------------------------------------+
+```
+
+*That output is rendered from the synthetic fixture in `tests/fixtures/`, not
+from a running engine — no real vLLM has been scraped yet. The command is
+tested; the numbers in it are made up.*
+
+Load is printed above latency deliberately: a p99 of 4 s means one thing at
+queue depth 60 and something entirely different at queue depth 0. Percentiles
+come from bucket counts using the same interpolation as Prometheus'
+`histogram_quantile`, so these numbers and a Grafana panel agree — and the
+output says out loud that they are no finer than the engine's bucket
+boundaries.
+
+`--duration 60 --interval 0.2 --out run.jsonl` samples instead of reading once,
+which is how a run's signals survive a GPU session nothing can scrape into.
+
 Already serving your own model? Swapping a hosted API for this one is a one-line
 change, because the endpoint is OpenAI-compatible:
 
@@ -109,8 +145,8 @@ goodput), the architecture, and every decision with its reasoning.
 | 0 | Foundations: execution profiles, hardware probe, config, ADRs | ✅ done |
 | 1 | vLLM serving + continuous batching proven on real hardware | ✅ **done** |
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ **done** |
-| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | next |
-| 4 | Benchmark harness: Poisson arrivals, concurrency sweeps, p50/p95/p99 | |
+| 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | ✅ **done** — but not yet scraped from a real vLLM |
+| 4 | Benchmark harness: Poisson arrivals, concurrency sweeps, p50/p95/p99 | next |
 | 5 | Continuous batching tuning, latency/throughput Pareto curves | |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, tensor parallelism | |
 | 7 | Rate limiting, admission control, graceful drain, multi-replica routing | |
@@ -152,6 +188,26 @@ an upstream emitting SSE chunks 200 ms apart, time-to-first-byte through the
 gateway is 218 ms versus 229 ms direct. A buffering proxy would have shown
 ~1000 ms and silently destroyed the 26 ms TTFT above.
 
+**It reports latency as a distribution, and admits what that costs.** Percentiles
+come from Prometheus bucket counts, because a mean TTFT of 200 ms is compatible
+with a p99 of 8 s and percentiles cannot be recovered by averaging percentiles.
+Interpolating inside a bucket has a price, and it is asserted in a test rather
+than glossed: a distribution whose exact median is 55 ms reads back as 57.5 ms
+through vLLM's default TTFT buckets, and an exact p99 of 61 ms reads back as
+79.6 ms.
+
+**Its metrics cannot disagree with the thing they describe.** In-flight and
+queued request counts are *collected from* the admission controller when
+Prometheus scrapes, not mirrored into gauges that the request path increments. A
+second copy is how Phase 2's slot leak would have reported itself as healthy.
+
+**And when a measurement comes out impossible, it says so.** Instrumentation
+cannot make a server faster, yet metrics-on measured 1.0 ms faster than
+metrics-off over 300 requests. That is the resolution of the method, not a
+finding, and [the artifact says exactly
+that](artifacts/curated/phase03/gateway-metrics.md) instead of rounding it to
+"free".
+
 ## Target hardware
 
 Three deliberately different machines, each described by a profile in
@@ -183,9 +239,11 @@ inferstack profiles                  # available execution profiles
 inferstack serve --dry-run           # print the exact vLLM command, launch nothing
 inferstack smoke -c 8                # prove the server batches (exits 1 if it doesn't)
 inferstack gateway                   # OpenAI-compatible edge: auth, streaming, backpressure
+inferstack metrics                   # queue depth, KV cache, TTFT/TPOT percentiles
 
 # ...or measure something you already run, no GPU required:
 inferstack smoke --base-url http://your-host:8000/v1 --model your-model
+inferstack metrics --url http://your-host:8000
 ```
 
 On a GPU session the whole Phase 1 run happens unattended — install, serve,
@@ -212,7 +270,10 @@ src/inferstack/
   engine/             launcher, measuring client, batching smoke check
   remote/             drive Kaggle GPU sessions from code
   gateway/            HTTP API in front         (Phase 2)
+  observability/      metrics: read, summarise, expose (Phase 3)
   bench/              load generation, analysis (Phase 4)
+deploy/compose/       Prometheus + Grafana, dashboard included
+scripts/              one-off measurement scripts behind the artifacts
 artifacts/curated/    measured results, committed
 docs/PROJECT-GUIDE.md theory, architecture, decisions
 docs/adr/             architecture decision records
@@ -222,7 +283,7 @@ docs/phases/          what each phase built and how to verify it
 ## Development
 
 ```bash
-pytest              # 131 tests
+pytest              # 271 tests
 ruff check .        # lint, including bandit security rules
 pre-commit install  # run both on every commit
 ```
@@ -235,6 +296,7 @@ pre-commit install  # run both on every commit
 - [Phase 0 — Foundations](docs/phases/phase-00-foundations.md)
 - [Phase 1 — Baseline serving](docs/phases/phase-01-baseline-serving.md) — including the three runs it took, and why each failure was real
 - [Phase 2 — The gateway](docs/phases/phase-02-gateway.md) — auth, streaming pass-through, admission control
+- [Phase 3 — Observability](docs/phases/phase-03-observability.md) — the four signals, histograms not averages, and what the instrumentation costs
 - [Architecture decision records](docs/adr/)
 
 ## Licence
