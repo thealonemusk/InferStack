@@ -1,0 +1,190 @@
+# Alerting and recording rules for InferStack.
+#
+# Every threshold here is a DEFAULT, not a measured SLO. A latency target is a
+# product decision - an interactive chat and an overnight batch job sit at
+# opposite ends of the same Pareto frontier - so the numbers below are starting
+# points chosen to be obviously wrong for somebody, and they should be set from
+# the Phase 4 curve rather than inherited from this file.
+#
+# What is not a matter of taste is *which* conditions are worth an alert. Each
+# rule below fires on a cause, not on a symptom, because "p99 is high" is a
+# statement nobody can act on and "the KV cache is full so the scheduler is
+# preempting" is.
+
+groups:
+  - name: inferstack.recording
+    interval: 1s
+    rules:
+      # Recorded once so the dashboard, the alerts and `inferstack metrics` all
+      # quote the same arithmetic. A percentile computed two ways is a
+      # percentile that will eventually disagree with itself.
+      - record: inferstack:ttft_seconds:p99
+        expr: >-
+          histogram_quantile(
+            0.99,
+            sum(rate(vllm:time_to_first_token_seconds_bucket[5m])) by (le)
+          )
+      # request_time_per_output_token_seconds, not time_per_output_token_seconds:
+      # the latter does not exist in vLLM 0.29.0, and a recording rule over a
+      # metric nobody emits evaluates to nothing forever without ever erroring.
+      - record: inferstack:tpot_seconds:p99
+        expr: >-
+          histogram_quantile(
+            0.99,
+            sum(rate(vllm:request_time_per_output_token_seconds_bucket[5m])) by (le)
+          )
+      # ITL is a different question from TPOT: the gap between tokens, rather
+      # than that gap averaged within a request.
+      - record: inferstack:itl_seconds:p99
+        expr: >-
+          histogram_quantile(
+            0.99,
+            sum(rate(vllm:inter_token_latency_seconds_bucket[5m])) by (le)
+          )
+
+  - name: inferstack.availability
+    rules:
+      - alert: EngineDown
+        expr: up{job="vllm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: engine
+        annotations:
+          summary: "The inference engine is not answering scrapes"
+          description: >-
+            Prometheus cannot reach vLLM's /metrics. The gateway will be
+            returning 502 to callers. Note this is the engine's own port, not
+            the gateway's - a healthy gateway proves nothing about the engine.
+
+      - alert: GatewayDown
+        expr: up{job="inferstack-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: gateway
+        annotations:
+          summary: "The gateway is not answering scrapes"
+          description: >-
+            Callers cannot reach the engine, and the engine's own metrics are
+            still being scraped separately (ADR-0007), so check those to tell a
+            gateway fault from an engine one.
+
+  - name: inferstack.saturation
+    rules:
+      - alert: KVCacheNearlyFull
+        expr: max(vllm:kv_cache_usage_perc or vllm:gpu_cache_usage_perc) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: engine
+        annotations:
+          summary: "KV cache above 90% - preemption is next"
+          description: >-
+            The KV cache is the real concurrency limit, not parameter count.
+            Above ~90% the scheduler starts evicting sequences and recomputing
+            them, which is where p99 spikes come from. Either reduce
+            max_num_seqs, reduce max_model_len, or add capacity.
+
+      - alert: EnginePreempting
+        expr: rate(vllm:num_preemptions_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: engine
+        annotations:
+          summary: "The engine is evicting and recomputing sequences"
+          description: >-
+            Sustained preemption means admitted work is being thrown away and
+            done twice. Throughput will look acceptable while tail latency does
+            not. Check KVCacheNearlyFull first - this is usually its consequence.
+
+      - alert: QueueDepthSustained
+        expr: min_over_time(vllm:num_requests_waiting[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: engine
+        annotations:
+          summary: "The engine queue has not been empty for 10 minutes"
+          description: >-
+            min_over_time, not avg: a queue that never empties means arrivals
+            are exceeding the service rate, and by Little's Law the wait grows
+            without bound until something sheds. A queue that merely spikes is
+            normal and does not fire this.
+
+  - name: inferstack.gateway
+    rules:
+      - alert: GatewaySheddingLoad
+        expr: rate(inferstack_gateway_rejected_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: gateway
+        annotations:
+          summary: "The gateway is refusing requests with 429"
+          description: >-
+            Admission control is doing its job, which means demand exceeds
+            configured capacity. Shedding is deliberate - a fast 429 is kinder
+            than a slow 504 - but sustained shedding is a capacity decision, not
+            a transient. Check queue depth and KV cache before raising
+            max_concurrent_requests, or the queue simply moves into the engine.
+
+      - alert: GatewayAtCapacity
+        expr: >-
+          inferstack_gateway_in_flight_requests
+            >= inferstack_gateway_capacity_requests
+        for: 5m
+        labels:
+          severity: info
+          component: gateway
+        annotations:
+          summary: "In-flight requests are pinned at the configured ceiling"
+          description: >-
+            The gateway, not the engine, is the current limit. Fires before
+            GatewaySheddingLoad does, because requests can still be waiting
+            within the queue budget rather than being refused.
+
+      - alert: StreamsBeingAbandoned
+        expr: rate(inferstack_gateway_streams_disconnected_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: info
+          component: gateway
+        annotations:
+          summary: "Clients are hanging up mid-stream"
+          description: >-
+            On a continuously-batched engine an abandoned request holds its slot
+            in the running batch until the upstream connection drops, so it
+            steals throughput from live requests. A rising rate usually means
+            client-side timeouts are shorter than the generation takes.
+
+  - name: inferstack.latency
+    rules:
+      - alert: TimeToFirstTokenSlow
+        expr: inferstack:ttft_seconds:p99 > 2
+        for: 10m
+        labels:
+          severity: warning
+          component: engine
+        annotations:
+          summary: "p99 TTFT above 2s"
+          description: >-
+            PLACEHOLDER THRESHOLD. 2s is not a measured target; set it from the
+            Phase 4 latency-versus-arrival-rate curve for your workload. TTFT is
+            dominated by queueing plus prefill, so check queue depth before
+            blaming the model.
+
+      - alert: TimePerOutputTokenSlow
+        expr: inferstack:tpot_seconds:p99 > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          component: engine
+        annotations:
+          summary: "p99 TPOT above 200ms/token"
+          description: >-
+            PLACEHOLDER THRESHOLD. Phase 1 measured 14.6 ms/token on a single
+            T4, so 200 ms is roughly 14x worse and deliberately loose. TPOT
+            degrading as load rises is the expected shape of the
+            latency-throughput trade-off, not a fault by itself.
