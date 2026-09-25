@@ -371,13 +371,24 @@ def plot_frontier(report: TuningReport, path: Path, title: str | None = None) ->
         else:
             labelled.add(style["label"])
         ax.scatter([x], [y], s=60, linewidths=1.4, zorder=4, **style)
+        # Tied configurations land on one point. One label listing all of them
+        # is readable; four labels drawn over each other are not, and a tie is
+        # itself the finding - the ladder could not tell those apart.
+        tied = [
+            r.variant.name
+            for r in report.results
+            if r.ok and (r.sustainable_rate, r.peak_goodput) == (x, y)
+        ]
+        if tied[0] != result.variant.name:
+            continue
         ax.annotate(
-            result.variant.name,
+            "\n".join(tied),
             xy=(x, y),
             xytext=(6, 4),
             textcoords="offset points",
             fontsize=7,
             color=INK if result.valid else MUTED,
+            verticalalignment="top" if len(tied) > 1 else "baseline",
         )
 
     _style(
