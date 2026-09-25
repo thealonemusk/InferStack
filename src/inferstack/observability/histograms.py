@@ -19,6 +19,14 @@ The implementation mirrors Prometheus' ``histogram_quantile`` deliberately,
 including its edge cases, so that a number printed by ``inferstack metrics`` and
 the same number on a Grafana panel agree. Where Prometheus returns ``NaN`` for
 "cannot be computed", this returns ``None``.
+
+**A scrape is cumulative over the engine's life.** vLLM's latency histograms
+start at zero when the engine boots and only grow, so a percentile read off one
+scrape describes every request since boot - warm-up, earlier sweep steps and
+all. :func:`histogram_delta` subtracts two scrapes of the same series, which is
+what ``increase()`` does before ``histogram_quantile`` in PromQL: bucket counts
+are counters, and the difference of two counters counts what happened between
+them.
 """
 
 from __future__ import annotations
@@ -29,7 +37,7 @@ from dataclasses import dataclass, field
 
 from inferstack.observability.promtext import Sample
 
-__all__ = ["HistogramView", "build_histograms", "quantile_from_buckets"]
+__all__ = ["HistogramView", "build_histograms", "histogram_delta", "quantile_from_buckets"]
 
 Bucket = tuple[float, float]  # (upper bound inclusive, cumulative count)
 
@@ -177,3 +185,63 @@ def build_histograms(samples: Sequence[Sample], name: str) -> list[HistogramView
             )
         )
     return views
+
+
+def histogram_delta(later: HistogramView, earlier: HistogramView) -> HistogramView | None:
+    """The histogram of observations made between two scrapes of one series.
+
+    Bucket-wise ``later - earlier``, and the same for ``_count`` and ``_sum``.
+    Because each bucket is itself a cumulative counter, the differences are
+    again cumulative bucket counts, so the result is an ordinary
+    :class:`HistogramView` and its quantiles come from the same
+    Prometheus-compatible arithmetic as any other.
+
+    Returns:
+        The delta, or ``None`` if any bucket or the count went *down*.
+
+    A decrease means the counters were reset between the scrapes - in practice,
+    the engine restarted. That is returned as ``None`` rather than raised
+    because it is a fact about the run, not a bug in the caller: a sweep that
+    lost its engine mid-step should record "no engine-side numbers for this
+    step" and keep its other forty minutes of GPU time, not crash. Prometheus'
+    own ``increase()`` instead *assumes* a reset and adds the post-reset value;
+    that is right for a rate over hours and wrong here, where the post-reset
+    counts would be a fraction of the step presented as all of it. Note the
+    limit: a restart after which the new engine has already done more than the
+    old one is indistinguishable from growth, so ``None`` catches most resets,
+    not all of them.
+
+    The sum is not used for reset detection: it is a float accumulator, and
+    only the counts are guaranteed monotonic by the exposition format.
+
+    Raises:
+        ValueError: if the two views have different names or bucket bounds.
+            Those are two different series, and subtracting them is a
+            programming error with no meaningful answer - not something to
+            paper over by matching buckets up approximately.
+    """
+    if later.name != earlier.name:
+        raise ValueError(f"cannot subtract {earlier.name!r} from {later.name!r}")
+    later_bounds = tuple(bound for bound, _ in later.buckets)
+    earlier_bounds = tuple(bound for bound, _ in earlier.buckets)
+    if later_bounds != earlier_bounds:
+        raise ValueError(
+            f"{later.name}: bucket bounds differ between scrapes "
+            f"({len(earlier_bounds)} vs {len(later_bounds)} buckets); not the same series"
+        )
+
+    count = later.count - earlier.count
+    deltas = [
+        (bound, after - before)
+        for (bound, after), (_, before) in zip(later.buckets, earlier.buckets, strict=True)
+    ]
+    if count < 0 or any(delta < 0 for _, delta in deltas):
+        return None
+
+    return HistogramView(
+        name=later.name,
+        labels=dict(later.labels),
+        buckets=tuple(deltas),
+        count=count,
+        sum=later.sum - earlier.sum,
+    )
