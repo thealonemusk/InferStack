@@ -10,68 +10,62 @@ instrument it, then load it until it breaks and write down where.
 
 ---
 
-## 16.5 requests per second — and the point where more load makes things worse
+## 16.5 requests per second — and why tuning the scheduler cannot raise it
 
-> **Correction, 25 Sep 2026.** The load generator that produced this curve was
-> capped at 100 concurrent connections by an httpx default, and nothing in it
-> could see the cap. At 24 req/s the client had **284** requests in flight while
-> the engine saw **100** — the rest waited inside the generator, and that wait
-> was recorded as server TTFT. Rows up to 12.5 req/s are unaffected (the engine
-> batch never passed 65). **The 24 req/s row, the five-second TTFT and the
-> "queue depth stayed at zero" finding below do not describe the engine.** The
-> cap is fixed, the harness now detects the whole class of problem, and Phase 5
-> re-measures this baseline in the same GPU session as the configurations it
-> tunes. [How it was found](docs/adr/0009-tuning-is-paired-and-open-loop-on-the-wire.md).
-
-![Goodput against offered load](artifacts/curated/phase04/goodput.png)
+![Goodput by engine configuration](artifacts/curated/phase05/variants.png)
 
 One **free-tier Tesla T4**. Qwen2.5-1.5B-Instruct, vLLM 0.29.0, 128-token
-prompts, 128-token responses. Open-loop Poisson arrivals at eight rates.
-[Every request that produced this is in the repo](artifacts/curated/phase04/records/).
+prompts, 128-token responses, open-loop Poisson arrivals. Six engine
+configurations were run back to back in one GPU session, with the baseline
+first and again last.
+[Every request is in the repo](artifacts/curated/phase05/variants/).
 
 | | Measured |
 |---|---|
 | **Sustained arrival rate** | **16.5 req/s** within TTFT < 1 s, TPOT < 50 ms |
-| **Peak goodput** | **13.5 req/s** |
-| Peak output throughput | 1,865 tok/s — *at a rate that misses the SLO* |
-| TTFT p50 / p99 at the limit | 120 ms / 593 ms |
+| **Peak goodput** | **13.8 req/s** |
+| Peak output throughput | 1,980 tok/s — *at a rate that misses the SLO* |
+| TTFT p50 / p99 at the limit | 118 ms / 153 ms |
+| What breaks first | **TPOT**: p99 42 ms at 16.5 req/s, 65 ms at 20 |
+| Baseline vs its repeat, same session | within 1–7% on every figure |
 
-**Read the last two points on that chart together.** Pushing from 16.5 to
-24 req/s made output throughput go **up** — 1,732 → 1,865 tok/s — while goodput
-fell **69%**, from 13.5 to 4.3 req/s, and median time-to-first-token went from
-120 ms to **5.1 seconds**.
+**The tuning result is a no.** Phase 5 set out to prove that lowering
+`max_num_seqs` from 256 would raise that number. The mechanism worked as
+predicted: at 20 req/s, a cap of 96 kept TPOT at 43 ms by making 62 requests
+wait in the queue, where 256 let the batch grow to 181 and slowed every one of
+them.
 
-A throughput-only benchmark reports 1,865 tok/s as this configuration's best
-result. It is its worst. The GPU is busier than it has ever been and 82% of
-arriving requests are already too late to be worth anything by the time they get
-a first token. The shaded region is that work: completed, paid for in GPU time,
-delivered after the deadline.
+The capacity did not move. 96, 128 and 256 all sustain 16.5 req/s, and 32 and
+64 are strictly worse. At 20 req/s the workload asks for 2,560 tokens a second
+from a GPU that never produced more than 1,980. Past capacity, a scheduler only
+decides *who* waits.
 
-That gap is why this project reports **goodput** — throughput counting only
-requests that met a stated service level — and why the service level is printed
-next to every capacity number it produces.
+What a lower cap buys is graceful overload, not capacity: at 20 req/s, `96`
+kept 8.0 req/s of goodput against 5.6 for the default.
+→ [The full result](artifacts/curated/phase05/tuning-result.md)
 
-### The finding that contradicted my own docs
+### The bug that faked the previous headline
 
-![The full sweep](artifacts/curated/phase04/sweep.png)
+Phase 4 reported this GPU collapsing to a **5.08-second** median TTFT at
+24 req/s, with the engine's queue empty throughout. Both were our own load
+generator. `httpx.AsyncClient()` defaults to **100 connections**, a stream holds
+its connection for its whole life, and the 101st request waited *inside the
+client*. That wait was recorded as server latency.
 
-Phase 3 of this project called `vllm:num_requests_waiting` *"the leading
-indicator of latency pain"*. In this run it **never moved** — queue depth was
-zero at every rate, including the one with five-second TTFT. KV-cache
-utilisation peaked at **2.9%** of a cache the engine had sized for 322,944
-tokens.
+| at 24 req/s | client in flight | engine batch + queue | TTFT p50 |
+|---|---|---|---|
+| Phase 4, capped | **284** | 100 + 0 | **5.08 s** |
+| Phase 5, fixed | 273 | 255 + 12 | **234 ms** |
 
-What moved was the running batch: **4 → 9 → 17 → 27 → 36 → 65 → 99 → 100**.
+The check built to catch a lagging generator passed, because it stamped the
+send before the pool wait. The tell was in the data all along: the engine batch
+read 99, then 100 — a ceiling, not a curve. The gateway had the same default,
+and admitted 512 requests while it could relay only 100.
 
-With `max_num_seqs=256` the scheduler admits almost everything straight into the
-running batch instead of queueing it. Past ~65 concurrent sequences the T4
-cannot drive the batch fast enough, so every request in it degrades together —
-no queue, no cache pressure, no preemption. The binding constraint is **compute**,
-and the "78.84× concurrency headroom" this project measured in Phase 1 is real
-arithmetic about memory that is unreachable in practice at this shape. Sizing a
-deployment from it would over-provision by roughly fourfold.
-
-→ [The full result, with what it does not show](artifacts/curated/phase04/sweep.md)
+Both are fixed. Every step now compares the client's in-flight count with what
+the engine is running and queueing, and flags any gap.
+→ [ADR-0009](docs/adr/0009-tuning-is-paired-and-open-loop-on-the-wire.md) ·
+[the Phase 4 record, corrected in place](docs/phases/phase-04-bench.md)
 
 ## Why you can believe the number
 
@@ -90,6 +84,11 @@ and the gap is reported per step; if it ever exceeds 250 ms the whole sweep is
 marked **invalid** and the CLI exits non-zero. That is not decoration —
 [here is the run where it fired](artifacts/curated/phase04/generator-ceiling.md),
 and the manufactured "saturation knee" it prevented from being published.
+
+**Open-loop means open-loop on the wire.** A schedule computed in advance is
+not enough if the transport under it has a pool. The harness now checks, every
+step, that the requests the client has in flight actually reached the engine —
+because once, for a whole phase, they did not.
 
 **The workload is pinned, and one that was not is kept as evidence.** The first
 sweep on real hardware passed every validity check the harness has and was
@@ -247,7 +246,7 @@ goodput), the architecture, and every decision with its reasoning.
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ **done** |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | ✅ **done**, verified against a real vLLM |
 | 4 | Benchmark harness: Poisson arrivals, open-loop sweeps, goodput | ✅ **done**, on a T4 |
-| 5 | Continuous batching tuning, latency/throughput Pareto curves | **in progress** — harness fixed and tuning built; GPU run under way |
+| 5 | Continuous batching tuning, latency/throughput Pareto curves | ✅ `max_num_seqs` **measured** — no capacity gain; `max_num_batched_tokens` next |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, tensor parallelism | |
 | 7 | Rate limiting, admission control, graceful drain, multi-replica routing | |
 | 8 | SGLang on the identical harness, head to head | |
@@ -272,10 +271,13 @@ tens of milliseconds up to ~40 req/s and by more than a second past it — and a
 that point it refuses to publish, prints why, and exits non-zero.
 [Measured, with the fake knee it prevented.](artifacts/curated/phase04/generator-ceiling.md)
 
-**It contradicts its own documentation when the data says to.** Phase 3 called
-queue depth "the leading indicator of latency pain". Phase 4 measured it at zero
-through a collapse from 13.5 to 4.3 req/s of goodput, and the docs now say so
-and explain why.
+**It contradicts its own documentation when the data says to — including its
+own corrections.** Phase 4 overturned Phase 3's claim that queue depth leads
+latency, by measuring a zero queue through a collapse. Phase 5 then found that
+the zero was made by the load generator's connection pool. The corrected answer
+is narrower: queue depth leads when `max_num_seqs` binds, and on this GPU at the
+default of 256 it is TPOT that moves first. All three versions are still in the
+repo, each marked with what replaced it.
 
 **It refuses to run configurations that cannot work.** `inferstack doctor`
 probes the machine, derives capabilities from CUDA compute capability, and exits

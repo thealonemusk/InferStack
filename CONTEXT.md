@@ -3,8 +3,10 @@
 A complete state snapshot. Written to be **pasted into a fresh session** (human
 or AI) so work can resume without re-deriving anything.
 
-**Last updated:** 25 Sep 2026, Phase 5 in progress — the harness was found capped at 100
-connections and fixed; the tuning session is running on Kaggle.
+**Last updated:** 25 Sep 2026. Phase 5 has measured `max_num_seqs`. The harness
+was found capped at 100 connections and fixed, the baseline was re-measured, and
+lowering the cap was shown not to raise capacity. `max_num_batched_tokens` is
+next.
 
 ---
 
@@ -32,7 +34,7 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 | Types | `mypy` **clean**, 38 source files |
 | CI | `.github/workflows/ci.yml` — **green**. lint, types, tests on 3.11 + 3.12; the measurement script over real sockets; promtool over config and rules |
 | Phases done | 0, 1, 2, 3, 4 — **all verified on real hardware** |
-| Phase now | **5 — tuning**, branch `phase-05-tuning` (pushed; draft PR). Code done; GPU session `inferstack-phase05-tune` running |
+| Phase now | **5 — tuning**, branch `phase-05-tuning` (pushed; draft PR). `max_num_seqs` measured on a T4; `max_num_batched_tokens` not yet |
 
 **This changed on 20 Sep 2026.** Phases 0–4 were reviewed and merged to `main`
 through pull requests, so the repository landing page now shows the real project
@@ -79,6 +81,13 @@ Measured on a real session: **2× Tesla T4**, SM 7.5, 15 GB each, driver
 - `thealonemusk/inferstack-phase01-serve` — install + serve + smoke, ~8 min
 - `thealonemusk/inferstack-phase03-stack` — install + serve + **gateway** +
   smoke through it + scrape both `/metrics`, ~9 min (538 s measured)
+- `thealonemusk/inferstack-phase04-bench` — the Phase 4 single-config ladder
+- `thealonemusk/inferstack-phase05-tune` — `bench_sweep.py` with the variant
+  loop: six configs × up to seven rates, **2,614 s** measured.
+  - Pushing needs the sandbox off, because api.kaggle.com is unreachable from
+    inside it.
+  - This machine's route to Kaggle drops out for minutes at a time, so retry
+    pushes.
 
 **Prometheus and Grafana binaries** are not installed on the dev machine and are
 not needed for the test suite; `scripts/verify_observability.py` takes their
@@ -270,6 +279,56 @@ an ever-larger batch instead of queueing. So:
   over-provisions ~4×
 - `max_num_seqs=256` is wrong for an interactive SLO here → **Phase 5's
   hypothesis, from a measurement rather than a guess**
+
+All three bullets above were drawn from the capped curve. Phase 5, below,
+replaces them:
+- compute is confirmed as the limit;
+- the 4× over-provisioning estimate is unverified;
+- 256 turned out to be right.
+
+### Phase 5 — lowering `max_num_seqs` does not raise capacity
+
+Kaggle T4, vLLM 0.29.0, TRITON_ATTN throughout, Qwen2.5-1.5B fp16, uncapped
+generator. One session, with the engine restarted between six configs and the
+baseline run first and last. Rates 8–32 req/s, 30 s each, 128 in / exactly 128
+out; the ladder stops after 2 consecutive SLO misses. Artifacts:
+`artifacts/curated/phase05/`, write-up in `tuning-result.md`.
+
+| `max_num_seqs` | sustainable (interactive) | peak goodput | sustainable (batch) |
+|---|---|---|---|
+| 32 | 8.25 | 7.07 | 8.25 |
+| 64 | 12.47 | 10.50 | 16.47 |
+| 96 | **16.47** | **13.80** | 19.97 |
+| 128 | **16.47** | **13.80** | 19.97 |
+| 256 | **16.47** | **13.80** | ≥ 24.08 (a floor: the ladder stopped) |
+| 256 repeat | **16.47** | **13.80** | ≥ 24.08 |
+
+**Headline:**
+- 16.47 req/s within TTFT < 1 s and TPOT < 50 ms; peak goodput 13.80.
+- TTFT p50/p99 at the limit: 118/153 ms.
+- **TPOT fails first:** p99 42 ms at 16.5 req/s and 65 ms at 20, with the queue still at zero.
+- The baseline and its repeat agree within 1–7% everywhere.
+
+**How to present it.** The mechanism was right. A smaller cap queues requests
+instead of slowing everyone down. At 20 req/s:
+- 96 gives TPOT 43 ms with 62 queued;
+- 256 gives TPOT 65 ms with 0 queued.
+
+The prediction was wrong, because 20 req/s × 128 tokens = 2,560 tok/s, more
+than the ~1,980 tok/s ceiling. Past capacity, scheduling only picks who waits.
+A lower cap buys graceful overload, not capacity: 96 keeps 8.03 req/s of goodput
+at 20 req/s, against 5.57. The default stays at 256.
+
+**Corrected baseline vs Phase 4:**
+- TTFT p99 at 16.5 req/s: 593 → **153 ms**.
+- TTFT p50 at 24 req/s: 5.08 s → **234 ms**.
+- Client in flight now matches engine running + waiting at every step (273 vs 255 + 12 at 24 req/s).
+
+**Harness evidence:**
+- no step flagged `held_outside_engine`;
+- worst generator lag 111 ms;
+- all six variants released cleanly;
+- KV cache peaked at 6.6%.
 
 ---
 
@@ -520,6 +579,17 @@ Each cost a real debugging cycle. Re-learning them is pure waste.
     curve — against a Little's-law estimate of ~170. Check engine concurrency
     against client concurrency, which the harness now does per step
     (`held_outside_engine`). The gateway had the same default.
+30. **A check that has only ever passed has not been tested.** The GPU-release
+    check read 0 MiB before every start and after every stop in Phase 5, so
+    it has never observed the condition it exists to catch. The Phase 4 lag
+    check was the same: it passed through the pool bug because it measured
+    the wrong interval. Where possible, prove a check can fail (a test with
+    a fake that holds memory; a real-socket test with a small pool).
+31. **An early stop judged on one SLO truncates every other SLO's answer.**
+    The Phase 5 ladders stopped when the *interactive* SLO failed twice, so
+    the batch SLO's sustainable rate for 256 is a floor (≥ 24.08), not a
+    measurement. `inferstack tune-report` re-judges records for free, but it
+    cannot re-judge rates that were never run.
 
 **The meta-lesson, now hit four times** (Phase 1 flag drift, Phase 2 admission
 scope, Phase 2 logging, Phase 3 metric name): *code exercised only by mocks is
@@ -637,20 +707,31 @@ Nothing from Phases 0–3 is outstanding. Everything below is either a later
 phase or a decision, and the three categories are kept apart on purpose —
 lumping them together overstates what is missing.
 
-**Phase 5, in progress:**
+**Phase 5, remaining:**
 
-- **No Phase 5 measurement yet.** Session `thealonemusk/inferstack-phase05-tune`
-  (baseline 256, then 32/64/96/128, then baseline-repeat; rates 8–32) was
-  pushed on 25 Sep 2026. A background job fetches it to `kaggle-out-phase05/`.
-  Then run `inferstack tune-report kaggle-out-phase05/variants --plot`, curate
-  into `artifacts/curated/phase05/`, and rewrite the README headline from the
-  corrected baseline.
-- **`max_num_batched_tokens` not swept.** A second session, same kernel, with
-  `INFERSTACK_VARIANTS` set, holding the best `max_num_seqs` fixed.
-- **Alert thresholds still placeholders**, to be set from the corrected
-  baseline, not from Phase 4.
-- **Unverified on real hardware:** VRAM release between engine restarts,
-  `nvidia-smi` parsing, the killpg escalation, and the session's real duration.
+- **`max_num_batched_tokens` not swept.** A second session with the same kernel
+  and `INFERSTACK_VARIANTS` set, holding `max_num_seqs=256`.
+- **The knee is unlocated between 16.47 and 19.97 req/s.** A ladder of 17, 18
+  and 19 is the only place 96, 128 and 256 could differ.
+- **Early stop is judged on the interactive SLO only**, so batch capacity above
+  24 req/s was never offered. It should stop only when every SLO of interest
+  has failed.
+- **The frontier treats noise as dominance.** It picked `baseline-repeat` over
+  `baseline` for the batch SLO by 0.03 req/s. Points within the baseline pair's
+  spread should be marked as ties.
+- **The GPU-release check has never seen a positive.** `nvidia-smi` read
+  0 MiB at every reading, all taken with no engine up, and the killpg
+  escalation never fired. The check passes, but has not been proven able to
+  fail.
+- **KV cache size varies between starts:** 322,944 tokens for the first
+  baseline, 338,512 for the repeat, and more with smaller caps. The cause is
+  unknown; irrelevant at 6.6% usage.
+- **`docs/PROJECT-GUIDE.md` §5.4 still argues the Phase 4 hypothesis** and has
+  not been revised for the cap or the Phase 5 result.
+- **The generator ceiling (~40 req/s on the laptop) was measured with the
+  capped client.** Lag is stamped before any pool wait, so the ceiling stands
+  in substance. Uncapped, the generator drives more sockets, and it has not
+  been re-measured.
 
 **Later phases, by design:**
 - **One workload, one run per rate.** 128 in, 128 out, greedy, no repeats and
@@ -699,63 +780,38 @@ lumping them together overstates what is missing.
 
 ---
 
-## 10. Next step — Phase 5, tuning, with a hypothesis already in hand
+## 10. Next step — finish Phase 5, then Phase 6
 
-> **Status, 25 Sep 2026:** the hypothesis below was drawn from the capped
-> Phase 4 curve and is **unconfirmed**. Everything in this section is built
-> (see `docs/phases/phase-05-tuning.md`). What remains is the GPU result, then
-> the `max_num_batched_tokens` session, then the thresholds.
+Continue on `phase-05-tuning` (draft PR against `main`). `max_num_seqs` is
+settled: **256 stays**. On this workload capacity is a throughput ceiling
+(~1,980 tok/s), not a scheduling choice.
 
-Branch `phase-05-tuning` from **`main`** — Phases 0–4 are merged, so the stack
-of phase branches is no longer the trunk. Nothing is owed from Phase 4.
+**Next session: `max_num_batched_tokens`.** Same kernel, for example:
 
-Phase 5 is normally the phase where you guess at knobs. It is not, here: the
-Phase 4 curve already says which knob and which direction.
+```
+INFERSTACK_VARIANTS="baseline:max_num_seqs=256;max_num_batched_tokens=2048;max_num_batched_tokens=4096;max_num_batched_tokens=16384;baseline-repeat:max_num_seqs=256"
+INFERSTACK_RATES="12,16,17,18,19,20,24"
+```
 
-**The hypothesis.** `max_num_seqs=256` lets vLLM's scheduler admit almost
-everything straight into the running batch. Measured, the batch grew 4 → 100
-while queue depth stayed at **zero** and KV cache never passed **2.9%**. Past
-about 65 concurrent sequences the T4 cannot drive the batch fast enough, so
-every request in it degrades together — which is why goodput collapses from
-13.54 to 4.25 req/s between 16.5 and 24 req/s while throughput *rises*.
+The finer rates around the knee answer the resolution caveat in the same
+session.
 
-Lowering `max_num_seqs` should make the engine **queue** instead of degrading
-everyone: a smaller batch runs faster per step, requests beyond the cap wait
-rather than joining and slowing the rest, and the tail stops dragging the head
-down. Expect a little less peak throughput and a materially higher sustainable
-rate. If that is wrong, the curve will say so, which is the point.
+The expectation, stated so it can be proven wrong: with 128-token prompts, the
+chunked-prefill budget rarely binds, because a step's prefill tokens are small
+next to 8192. Little should move except at the smallest budget. If nothing
+moves, that is the result, and it says the next lever is not the scheduler at
+all. It is Phase 6 (int4 weights, prefix caching, speculative decoding), which
+changes the per-token cost the ceiling is made of.
 
-Concretely:
+Before or alongside that session, fix the two analysis caveats in §9: the early
+stop judged on one SLO, and noise treated as dominance. Both are laptop work.
 
-- Sweep `max_num_seqs` (try 32, 64, 96, 128, 256) at a fixed arrival ladder, and
-  `max_num_batched_tokens` (chunked prefill's budget) as the second knob.
-- Report a **Pareto frontier**: peak goodput against sustainable rate, one point
-  per configuration. There is no single best setting — where you sit on that
-  frontier is a product decision, and an interactive chat and an overnight batch
-  job want opposite ends of it.
-- Judge every configuration against **both** SLOs from one run.
-  `inferstack analyse` re-judges recorded runs without a GPU, so the batch-target
-  answer is free once the interactive one exists.
-- Set the placeholder alert thresholds in
-  `deploy/compose/prometheus/rules/inferstack.yml` from the result.
-- Extend `remote/kernels/bench_sweep.py` rather than writing a third kernel: it
-  already installs, serves, sweeps, samples and plots. It needs a loop over
-  engine configurations and an engine restart between them.
+Three things to carry forward, all hit for real in Phase 4 or 5:
 
-**Budget it.** One ladder is about 40 minutes of GPU time, so five
-configurations is a session of its own. Cut the ladder to the rates that
-straddle the knee — roughly 8, 12, 16, 20, 24 — rather than re-measuring the
-flat region five times.
-
-Three things to carry forward:
-
-1. **Check throughput against arrival rate before believing any curve.** The
-   first Phase 4 run passed every validity check and measured nothing, because
-   the workload asked the engine for three tokens.
-2. **Restart the engine between configurations.** `max_num_seqs` is a launch
-   flag, and a config change that does not restart is a config change that did
-   not happen.
-3. **Pair the comparisons within one session.** The Phase 1/Phase 3 gateway-cost
-   numbers are unpaired across sessions and that limits what they support.
-
-The reasoning is written up in `docs/PROJECT-GUIDE.md` §5.4.
+1. **Check throughput against arrival rate before believing any curve, and
+   client concurrency against engine concurrency.** Each has faked a result.
+2. **Restart the engine between configurations**, and record per start what
+   the engine says it sized (KV tokens, attention backend).
+3. **Pair the comparisons within one session**, with the baseline first and
+   last. A gap smaller than the gap between the two baseline runs is not a
+   difference.

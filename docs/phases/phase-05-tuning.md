@@ -5,11 +5,52 @@
 of sustainable rate against peak goodput. Judge every configuration against
 both an interactive SLO and a batch SLO.
 
-**Status:** **in progress.** The harness has been corrected and the tuning
-machinery is built and tested. The GPU session (`inferstack-phase05-tune`) is
-running. **No Phase 5 number exists yet**, and none appears below.
+**Status:** `max_num_seqs` is **measured**, on a Tesla T4 on 25 Sep 2026.
+`max_num_batched_tokens` is not swept yet. Artifacts:
+`artifacts/curated/phase05/`; the full write-up is
+[`tuning-result.md`](../../artifacts/curated/phase05/tuning-result.md).
 
 ---
+
+## Result
+
+**Lowering `max_num_seqs` does not raise capacity on a T4.** The default, 256,
+stays.
+
+| `max_num_seqs` | sustainable, interactive | peak goodput | sustainable, batch |
+|---|---|---|---|
+| 32 | 8.25 req/s | 7.07 | 8.25 |
+| 64 | 12.47 req/s | 10.50 | 16.47 |
+| 96 | **16.47 req/s** | **13.80** | 19.97 |
+| 128 | **16.47 req/s** | **13.80** | 19.97 |
+| 256 | **16.47 req/s** | **13.80** | **≥ 24.08** |
+| 256, repeated last | **16.47 req/s** | **13.80** | **≥ 24.08** |
+
+- **Interactive SLO:** TTFT < 1 s, TPOT < 50 ms.
+- **Batch SLO:** TTFT < 5 s, TPOT < 200 ms, re-judged from the same records.
+- The batch rate for 256 is a floor: every ladder stopped at 24 req/s.
+
+**The mechanism was right, and the prediction was wrong.** A smaller cap does
+make the engine queue instead of slowing everyone down. At 20 req/s:
+
+- **256:** TPOT p99 is 65 ms with an empty queue.
+- **96:** TPOT p99 is 43 ms with 62 requests queued.
+
+But 20 req/s × 128 tokens is 2,560 tok/s, and this GPU never produced more than
+1,980. Past capacity, scheduling only chooses *who* waits. The sustainable rate
+is set by throughput, somewhere between 16.5 and 20 req/s, and the ladder is too
+coarse to separate 96, 128 and 256 inside that gap.
+
+**What a lower cap does buy is graceful overload.** `max_num_seqs=96` keeps
+8.03 req/s of goodput at 20 req/s, against 5.57 for 256. The frontier's axes
+cannot show that, so it is stated here.
+
+**The corrected baseline.** Same profile, workload and seed as Phase 4, without
+the connection cap:
+- **Sustainable rate:** unchanged at 16.47 req/s, but the first thing to fail is TPOT, not TTFT.
+- **p99 TTFT at 16.5 req/s:** falls from 593 ms to **153 ms**.
+- **TTFT p50 at 24 req/s:** falls from 5.08 s to **234 ms**.
+- **Noise:** the baseline and its repeat agree within 1–7% everywhere.
 
 ## The first finding came before any GPU time: Phase 4's generator was capped
 
@@ -65,16 +106,31 @@ artifacts are left exactly as measured. Recorded in
 - **Stopping rule:** a ladder stops after 2 consecutive unhealthy steps.
 - **SLOs:** interactive is TTFT < 1 s and TPOT < 50 ms. Batch (TTFT < 5 s, TPOT < 200 ms) is re-judged afterwards from the records.
 
+## What the session proved about the harness
+
+- **Held requests:** none were flagged. Client in flight matched engine running plus waiting at every rate.
+- **Generator lag:** the worst was 111 ms, against a 250 ms threshold.
+- **Restarts:** all six variants started, swept and stopped, each with its port closed and VRAM back at baseline.
+  - Session length: 2,614 s.
+  - The first start took 721 s (cold `torch.compile` cache); later starts took 87–103 s.
+- **The GPU-release check has not yet caught anything.** `nvidia-smi` read 0 MiB at every reading, all taken with no engine running, so the check has never seen a held GPU. The independent evidence is the KV cache size: no start reported less cache than the first one.
+- **The kill escalation never triggered**, so it is still untested on real hardware.
+
+## Alert thresholds, now measured
+
+`TimeToFirstTokenSlow` fires at p99 > 1 s, and `TimePerOutputTokenSlow` at p99
+> 50 ms: the interactive SLO on `colab-t4`. Each rule's description cites the
+measurement. TPOT is the signal that breaks first with `max_num_seqs=256`: p99
+was 42 ms at the sustainable rate, so its headroom is thin by design. A test
+requires every latency threshold to name the profile and the SLO it came from.
+
 ## Not done yet
 
-- **The measurements.** Every result section of this record waits on the session.
-- **`max_num_batched_tokens`**: a second session, with `INFERSTACK_VARIANTS` set, once the first frontier says which `max_num_seqs` to hold fixed.
-- **Alert thresholds** in `deploy/compose/prometheus/rules/inferstack.yml` are still placeholders. They are set from the corrected baseline, not from Phase 4.
-- **Untested without a GPU:**
-  - whether vLLM 0.29.0 releases VRAM within the 180 s allowed;
-  - that `nvidia-smi` output parses as expected;
-  - the kill escalation path;
-  - how long the whole session takes. The kernel records all four.
+- **`max_num_batched_tokens`**: a second session with `INFERSTACK_VARIANTS` set, holding `max_num_seqs=256`.
+- **A finer ladder across the knee** (17, 18, 19 req/s). It is the only place 96, 128 and 256 could differ.
+- **Early stop judged on one SLO.** It is judged on the interactive SLO, so batch capacity above 24 req/s was never offered. Making it stop only when every SLO of interest has failed would let the batch answer come from the same run.
+- **The frontier treats noise as dominance.** It picked `baseline-repeat` over `baseline` for the batch SLO by 0.03 req/s. The tool should mark points within the baseline-pair spread as ties.
+- **KV cache size varied between starts:** 322,944 tokens for the first baseline, 338,512 for the repeat. The cause is unknown. It did not matter here (peak usage 6.6%), but it would for a memory-bound workload.
 
 ## Verify
 
@@ -83,5 +139,5 @@ pytest -p no:warnings                    # 497 passed, 2 skipped
 pytest tests/test_connection_pool.py     # the cap, over real sockets
 inferstack analyse artifacts/curated/phase04/records   # replays carry no engine peaks,
                                                        # so the held-outside warning needs a live sweep
-inferstack tune-report kaggle-out-phase05/variants --plot   # once the session returns
+inferstack tune-report artifacts/curated/phase05/variants --plot   # both SLOs, no GPU
 ```
