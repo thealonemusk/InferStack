@@ -1,10 +1,10 @@
 # Alerting and recording rules for InferStack.
 #
-# Every threshold here is a DEFAULT, not a measured SLO. A latency target is a
-# product decision - an interactive chat and an overnight batch job sit at
-# opposite ends of the same Pareto frontier - so the numbers below are starting
-# points chosen to be obviously wrong for somebody, and they should be set from
-# the Phase 4 curve rather than inherited from this file.
+# The two latency thresholds are MEASURED, for one stated target: the
+# interactive SLO (TTFT < 1 s, TPOT < 50 ms) on the colab-t4 profile, from the
+# Phase 5 baseline (artifacts/curated/phase05/). A latency target is still a
+# product decision - an overnight batch job would set both far looser - so a
+# different SLO or a different GPU means re-measuring, not editing a number.
 #
 # What is not a matter of taste is *which* conditions are worth an alert. Each
 # rule below fires on a cause, not on a symptom, because "p99 is high" is a
@@ -162,29 +162,31 @@ groups:
   - name: inferstack.latency
     rules:
       - alert: TimeToFirstTokenSlow
-        expr: inferstack:ttft_seconds:p99 > 2
+        expr: inferstack:ttft_seconds:p99 > 1
         for: 10m
         labels:
           severity: warning
           component: engine
         annotations:
-          summary: "p99 TTFT above 2s"
+          summary: "p99 TTFT above the 1s interactive SLO"
           description: >-
-            PLACEHOLDER THRESHOLD. 2s is not a measured target; set it from the
-            Phase 4 latency-versus-arrival-rate curve for your workload. TTFT is
-            dominated by queueing plus prefill, so check queue depth before
-            blaming the model.
+            MEASURED (Phase 5, colab-t4, interactive SLO). At the sustainable
+            16.5 req/s p99 TTFT was 153 ms, so this fires well past the healthy
+            region. With max_num_seqs=256 TTFT is the second signal to go, after
+            TPOT; with a lower cap it is the first, and it is queue time - check
+            vllm:num_requests_waiting before blaming prefill.
 
       - alert: TimePerOutputTokenSlow
-        expr: inferstack:tpot_seconds:p99 > 0.2
+        expr: inferstack:tpot_seconds:p99 > 0.05
         for: 10m
         labels:
           severity: warning
           component: engine
         annotations:
-          summary: "p99 TPOT above 200ms/token"
+          summary: "p99 TPOT above the 50ms/token interactive SLO"
           description: >-
-            PLACEHOLDER THRESHOLD. Phase 1 measured 14.6 ms/token on a single
-            T4, so 200 ms is roughly 14x worse and deliberately loose. TPOT
-            degrading as load rises is the expected shape of the
-            latency-throughput trade-off, not a fault by itself.
+            MEASURED (Phase 5, colab-t4, interactive SLO). This is the signal
+            that breaks first: p99 TPOT was 42 ms at the sustainable 16.5 req/s
+            and 65 ms at 20 req/s, with the queue still empty, because the
+            running batch grows instead. Headroom is thin by design - this
+            fires at the edge of capacity, not after it.

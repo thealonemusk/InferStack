@@ -374,12 +374,16 @@ def test_the_cache_alert_accepts_both_metric_spellings(rules: dict) -> None:
     assert "gpu_cache_usage_perc" in alert["expr"]
 
 
-def test_placeholder_thresholds_are_labelled_as_placeholders(rules: dict) -> None:
-    """A latency target is a product decision. Shipping one as though it were
-    measured is the kind of quiet claim this project exists not to make."""
+def test_latency_thresholds_say_what_they_were_measured_against(rules: dict) -> None:
+    """A latency target is a product decision. A threshold that does not name the
+    measurement, the profile and the SLO it came from is a guess wearing a
+    number - which is what these were until Phase 5 measured them."""
     for alert in alerts(rules):
         if "Slow" in alert["alert"]:
-            assert "PLACEHOLDER" in alert["annotations"]["description"], alert["alert"]
+            description = alert["annotations"]["description"]
+            assert "MEASURED" in description, alert["alert"]
+            assert "colab-t4" in description, alert["alert"]
+            assert "interactive SLO" in description, alert["alert"]
 
 
 @pytest.mark.skipif(shutil.which("promtool") is None, reason="promtool is not installed")
