@@ -15,6 +15,12 @@ The commands, in the order a session tends to use them:
     inferstack metrics             read the engine's Prometheus signals
     inferstack bench               map the latency/throughput curve
     inferstack analyse             re-judge a finished sweep against another SLO
+    inferstack tune-report         compare engine configurations: the frontier
+
+There is deliberately no command that restarts an engine per configuration.
+Launch flags only change on restart, and the engine lives on the GPU session
+(ADR-0005), so the restart loop belongs to the remote kernel; ``tune-report``
+reads back what it wrote.
 """
 
 from __future__ import annotations
@@ -36,6 +42,12 @@ from inferstack.bench.load import Workload
 from inferstack.bench.records import reanalyse
 from inferstack.bench.report import ServiceLevel, StepSummary, SweepReport
 from inferstack.bench.sweep import SweepConfig, run_sweep
+from inferstack.bench.tuning import (
+    DEFAULT_BATCH_SLO,
+    TuningReport,
+    VariantResult,
+    load_tuning,
+)
 from inferstack.compat import Issue, check_profile, worst_severity
 from inferstack.config import Settings, available_profiles, load_settings, resolve_profile
 from inferstack.engine.launcher import (
@@ -1137,6 +1149,150 @@ def analyse(
             notes.print(f"[dim]{plot_sweep(report, destination / f'sweep-{name}.png')}[/dim]")
         except ImportError as exc:
             err_console.print(f"[yellow]{exc}[/yellow]")
+
+
+def _variant_status(result: VariantResult) -> str:
+    if not result.ok:
+        return f"[red]failed[/red] [dim]{result.error or 'no report'}[/dim]"
+    if not result.valid:
+        return "[bold red]INVALID[/bold red] [dim]generator fell behind[/dim]"
+    return "[green]ok[/green]"
+
+
+def _render_tuning(report: TuningReport) -> None:
+    """One row per engine configuration, judged against one SLO."""
+    on_frontier = {r.variant.name for r in report.frontier()}
+    table = Table(box=None, padding=(0, 2, 0, 0))
+    table.add_column("variant")
+    table.add_column("sustains", justify="right")
+    table.add_column("peak goodput", justify="right")
+    table.add_column("at", justify="right")
+    table.add_column("peak tok/s", justify="right")
+    table.add_column("TTFT p99 @ limit", justify="right")
+    table.add_column("batch", justify="right")
+    table.add_column("frontier", justify="center")
+    table.add_column("", justify="left")
+
+    for result in report.results:
+        row = result.summary()
+        sustainable = row["max_sustainable_rate_per_s"]
+        goodput = row["peak_goodput_per_s"]
+        at_rate = row["peak_goodput_at_rate_per_s"]
+        tokens = row["peak_output_tokens_per_s"]
+        batch = row["peak_running_batch"]
+        table.add_row(
+            result.variant.name,
+            "-" if sustainable is None else f"[bold]{sustainable:.1f}/s[/bold]",
+            "-" if goodput is None else f"{goodput:.1f}/s",
+            "-" if at_rate is None else f"{at_rate:.1f}/s",
+            "-" if tokens is None else f"{tokens:.0f}",
+            _fmt_seconds(row["ttft_p99_at_sustainable_s"]),
+            "-" if batch is None else f"{batch:.0f}",
+            "[bold blue]*[/bold blue]" if result.variant.name in on_frontier else "",
+            _variant_status(result),
+        )
+
+    slo = report.slo
+    title = f"{slo.name} SLO: TTFT < {slo.ttft_s:g}s, TPOT < {slo.tpot_s:g}s"
+    console.print(Panel(table, title=title, title_align="left", border_style="blue"))
+    console.print(f"[dim]{report.verdict()}[/dim]")
+
+
+@app.command("tune-report")
+def tune_report(
+    directory: Annotated[
+        Path, typer.Argument(help="A tuning run: one sub-directory per engine variant.")
+    ],
+    ttft_slo: Annotated[float, typer.Option("--ttft-slo")] = 1.0,
+    tpot_slo: Annotated[float, typer.Option("--tpot-slo")] = 0.05,
+    name: Annotated[
+        str, typer.Option("--name", help="Label for this service level.")
+    ] = "interactive",
+    batch: Annotated[
+        bool,
+        typer.Option(
+            "--batch/--no-batch",
+            help=(
+                f"Also judge against the batch SLO (TTFT < {DEFAULT_BATCH_SLO.ttft_s:g}s, "
+                f"TPOT < {DEFAULT_BATCH_SLO.tpot_s:g}s)."
+            ),
+        ),
+    ] = True,
+    plot: Annotated[bool, typer.Option("--plot", help="Write the frontier charts.")] = False,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Where to write tuning.md/json and charts.")
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Compare engine configurations from one tuning run: the Pareto frontier.
+
+    Each configuration is a point - the highest arrival rate it sustained
+    within the SLO, and the peak goodput it reached - and the frontier is the
+    set nothing else beats on both. There is no single best setting: where to
+    sit on the frontier is a product decision, so every run is judged against
+    the SLO given here and, by default, against the batch SLO as well. Both
+    come from the same per-request records; no GPU is needed.
+
+        inferstack tune-report artifacts/runs/tune-1234 --plot
+
+    A configuration whose load generator fell behind is reported INVALID and
+    kept off the frontier. Exits 1 if no configuration produced a valid curve.
+    """
+    primary = ServiceLevel(ttft_s=ttft_slo, tpot_s=tpot_slo, name=name)
+    slos = [primary]
+    if batch and DEFAULT_BATCH_SLO.name != name:
+        slos.append(DEFAULT_BATCH_SLO)
+
+    try:
+        reports = [load_tuning(directory, slo) for slo in slos]
+    except FileNotFoundError as exc:
+        err_console.print(f"[bold red]{exc}[/bold red]")
+        raise typer.Exit(1) from exc
+
+    # See `bench`: with --json, stdout carries the report and nothing else.
+    notes = err_console if as_json else console
+    payload = {"directory": str(directory), "reports": [r.to_dict() for r in reports]}
+    if as_json:
+        # allow_nan=False: to_dict already replaced non-finite floats, and this
+        # makes a regression fail here rather than in whatever reads the output.
+        console.print_json(json.dumps(payload, allow_nan=False))
+    else:
+        console.print(f"[dim]{directory}: {len(reports[0].results)} engine variant(s)[/dim]")
+        for report in reports:
+            _render_tuning(report)
+
+    if out is not None or plot:
+        destination = out or directory
+        destination.mkdir(parents=True, exist_ok=True)
+        json_path = destination / "tuning.json"
+        json_path.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
+        md_path = destination / "tuning.md"
+        md_path.write_text(NEWLINE.join(r.to_markdown() for r in reports), encoding="utf-8")
+        notes.print(f"[dim]{json_path}[/dim]")
+        notes.print(f"[dim]{md_path}[/dim]")
+
+        if plot:
+            try:
+                from inferstack.bench.plots import plot_frontier, plot_variants
+
+                for index, report in enumerate(reports):
+                    # The SLO asked for gets the plain file names; any other
+                    # SLO judged alongside it is suffixed with its own name.
+                    suffix = "" if index == 0 else f"-{report.slo.name}"
+                    frontier_png = plot_frontier(report, destination / f"frontier{suffix}.png")
+                    variants_png = plot_variants(report, destination / f"variants{suffix}.png")
+                    notes.print(f"[dim]{frontier_png}[/dim]")
+                    notes.print(f"[dim]{variants_png}[/dim]")
+            except ImportError as exc:
+                err_console.print(f"[yellow]{exc}[/yellow]")
+
+    # Validity does not depend on the SLO, so the first report answers for all.
+    if not any(result.valid for result in reports[0].results):
+        err_console.print(
+            "[bold red]No configuration produced a valid curve.[/bold red] Every variant "
+            "either failed to run or had a load generator that fell behind its schedule."
+        )
+        raise typer.Exit(1)
 
 
 @app.command()
