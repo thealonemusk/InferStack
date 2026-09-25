@@ -411,3 +411,25 @@ async def test_client_disconnect_releases_the_slot() -> None:
     # What Starlette does when the client goes away.
     await body.aclose()
     assert controller.stats().in_flight == 0, "abandoning a stream must free its slot"
+
+
+# --- the upstream pool is never the hidden limit -----------------------------
+
+
+def test_the_upstream_pool_is_sized_from_the_admission_limit() -> None:
+    """httpx's default of 100 connections once sat under an admission limit of 512.
+
+    Admitted requests then waited for a connection where no admission metric
+    could see them. The real-socket proof is in test_connection_pool.py; this
+    pins the wiring.
+    """
+    settings = make_settings(max_concurrent_requests=321)
+    app = create_app(settings)
+    assert app.state.proxy.max_connections == 321
+
+
+def test_an_injected_proxy_is_left_alone() -> None:
+    proxy = EngineProxy("http://engine:8000/v1", max_connections=7)
+    app = create_app(make_settings(max_concurrent_requests=321), proxy=proxy)
+    assert app.state.proxy is proxy
+    assert proxy.max_connections == 7

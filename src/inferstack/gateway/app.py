@@ -119,9 +119,15 @@ def create_app(settings: Settings | None = None, proxy: EngineProxy | None = Non
     # work once a lifespan has run is a trap: mounting it as a sub-application,
     # or driving it through a raw ASGI transport, then fails with an opaque
     # AttributeError on the first request instead of a clear error.
+    #
+    # The upstream pool is sized from the admission limit so that admission
+    # control is the only concurrency limit. With httpx's default (100) under an
+    # admission limit of 512, admitted requests queued for a connection where no
+    # metric could see them.
     engine_proxy = injected_proxy or EngineProxy(
         base_url=settings.engine.base_url,
         timeout_s=settings.gateway.request_timeout_s,
+        max_connections=settings.gateway.max_concurrent_requests,
     )
     admission = AdmissionController(
         max_concurrent=settings.gateway.max_concurrent_requests,

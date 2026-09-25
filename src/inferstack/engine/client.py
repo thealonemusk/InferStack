@@ -84,8 +84,30 @@ class CompletionResult:
         }
 
 
+# Idle connections kept open for reuse. Deliberately independent of the cap on
+# open connections: keep-alive decides how much reconnect churn a burst costs,
+# not how many requests may be in flight, and conflating the two is how a pool
+# limit ends up hiding inside a "keep-alive" setting.
+DEFAULT_MAX_KEEPALIVE = 64
+
+
 class EngineClient:
-    """Async client for an OpenAI-compatible inference server."""
+    """Async client for an OpenAI-compatible inference server.
+
+    ``max_connections`` caps concurrent connections, and **defaults to no cap**.
+    httpx's own default is 100, and a streaming request holds its connection for
+    its whole lifetime, so the 101st concurrent stream waits inside httpx for a
+    free connection. Nothing reports that wait: the request's clock has already
+    started, so it surfaces as server TTFT. Phase 4 found exactly this - the
+    engine's running batch topped out at 99-100 at 16.5 and 24 req/s with an
+    empty queue and ``max_num_seqs=256``, i.e. the knee was at least partly this
+    client's pool, not the scheduler.
+
+    For a load generator the rule is absolute: an open-loop generator that
+    queues internally is a closed-loop generator in disguise, so it must never
+    be capped below the concurrency it offers. Pass a number only to model a
+    client that genuinely has a connection limit.
+    """
 
     def __init__(
         self,
@@ -94,19 +116,29 @@ class EngineClient:
         api_key: str | None = None,
         timeout_s: float = 300.0,
         client: httpx.AsyncClient | None = None,
+        max_connections: int | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_s = timeout_s
+        self.max_connections = max_connections
         self._headers = {"Content-Type": "application/json"}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"
         self._client = client
         self._owns_client = client is None
 
+    def _limits(self) -> httpx.Limits:
+        keepalive = DEFAULT_MAX_KEEPALIVE
+        if self.max_connections is not None:
+            keepalive = min(keepalive, self.max_connections)
+        return httpx.Limits(
+            max_connections=self.max_connections, max_keepalive_connections=keepalive
+        )
+
     async def __aenter__(self) -> EngineClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self.timeout_s)
+            self._client = httpx.AsyncClient(timeout=self.timeout_s, limits=self._limits())
         return self
 
     async def __aexit__(self, *exc: object) -> None:

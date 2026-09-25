@@ -58,8 +58,28 @@ STREAM_HEADERS = {
 }
 
 
+# Connections beyond the admission limit, for calls admission control does not
+# count: health checks and model listings. Without them a gateway running at its
+# limit would fail its own readiness probe while waiting for a pooled connection.
+CONTROL_CONNECTIONS = 8
+
+# Idle upstream connections kept for reuse. Churn control only - it never limits
+# how many requests are in flight.
+MAX_KEEPALIVE = 64
+
+
 class EngineProxy:
-    """A thin, streaming-aware client for the upstream engine."""
+    """A thin, streaming-aware client for the upstream engine.
+
+    ``max_connections`` should be the gateway's admission limit, and
+    :func:`inferstack.gateway.app.create_app` wires it so. A relayed stream
+    holds one upstream connection for its whole life, so the pool *is* a
+    concurrency limit; left at httpx's default of 100 it sat silently beneath an
+    admission limit of 512, and requests the gateway had admitted waited for a
+    connection, invisible to admission metrics and indistinguishable from engine
+    TTFT. The same default was found capping the Phase 4 load generator. ``None``
+    means no cap: admission control is then the only limit, which is the point.
+    """
 
     def __init__(
         self,
@@ -67,12 +87,17 @@ class EngineProxy:
         timeout_s: float = 300.0,
         connect_timeout_s: float = 5.0,
         client: httpx.AsyncClient | None = None,
+        max_connections: int | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
+        self.max_connections = max_connections
         self._owns_client = client is None
+        pool_cap = None if max_connections is None else max_connections + CONTROL_CONNECTIONS
+        keepalive = MAX_KEEPALIVE if pool_cap is None else min(MAX_KEEPALIVE, pool_cap)
         self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout_s, connect=connect_timeout_s)
+            timeout=httpx.Timeout(timeout_s, connect=connect_timeout_s),
+            limits=httpx.Limits(max_connections=pool_cap, max_keepalive_connections=keepalive),
         )
 
     @property

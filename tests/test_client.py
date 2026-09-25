@@ -262,3 +262,18 @@ async def test_api_key_becomes_a_bearer_header() -> None:
         await client.list_models()
 
     assert seen["authorization"] == "Bearer sk-test"
+
+
+# --- the connection pool ------------------------------------------------------
+
+
+def test_the_client_has_no_connection_cap_by_default() -> None:
+    """A load generator capped below its offered concurrency is closed-loop.
+
+    httpx defaults to 100 connections; Phase 4's knee was partly that default.
+    The real-socket proof is in test_connection_pool.py.
+    """
+    assert EngineClient("http://engine:8000/v1", model="m").max_connections is None
+    assert (
+        EngineClient("http://engine:8000/v1", model="m", max_connections=10).max_connections == 10
+    )
