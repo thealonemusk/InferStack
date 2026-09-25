@@ -1,0 +1,32 @@
+{
+  "variant": {
+    "name": "max_num_seqs=64",
+    "overrides": {
+      "max_num_seqs": 64
+    }
+  },
+  "engine_command": [
+    "vllm",
+    "serve",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "--served-model-name",
+    "qwen2.5-1.5b",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8000",
+    "--dtype",
+    "float16",
+    "--max-model-len",
+    "4096",
+    "--max-num-seqs",
+    "64",
+    "--max-num-batched-tokens",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--enable-chunked-prefill"
+  ],
+  "startup_s": 98.5463833880001,
+  "error": null
+}

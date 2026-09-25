@@ -1,0 +1,220 @@
+{
+  "baseline_mib": 0.0,
+  "baseline_readings": [
+    0.0,
+    0.0
+  ],
+  "tolerance_mib": 256.0,
+  "variants": {
+    "baseline": {
+      "before_start": {
+        "verified": true,
+        "released": true,
+        "waited_s": 0.0,
+        "readings": [
+          {
+            "t_s": 0.0,
+            "used_mib": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "release": {
+        "exit_code": 0,
+        "port_closed": true,
+        "gpu": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "clean": true
+      }
+    },
+    "max_num_seqs-32": {
+      "before_start": {
+        "verified": true,
+        "released": true,
+        "waited_s": 0.0,
+        "readings": [
+          {
+            "t_s": 0.0,
+            "used_mib": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "release": {
+        "exit_code": 0,
+        "port_closed": true,
+        "gpu": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "clean": true
+      }
+    },
+    "max_num_seqs-64": {
+      "before_start": {
+        "verified": true,
+        "released": true,
+        "waited_s": 0.0,
+        "readings": [
+          {
+            "t_s": 0.0,
+            "used_mib": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "release": {
+        "exit_code": 0,
+        "port_closed": true,
+        "gpu": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "clean": true
+      }
+    },
+    "max_num_seqs-96": {
+      "before_start": {
+        "verified": true,
+        "released": true,
+        "waited_s": 0.0,
+        "readings": [
+          {
+            "t_s": 0.0,
+            "used_mib": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "release": {
+        "exit_code": 0,
+        "port_closed": true,
+        "gpu": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "clean": true
+      }
+    },
+    "max_num_seqs-128": {
+      "before_start": {
+        "verified": true,
+        "released": true,
+        "waited_s": 0.0,
+        "readings": [
+          {
+            "t_s": 0.0,
+            "used_mib": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "release": {
+        "exit_code": 0,
+        "port_closed": true,
+        "gpu": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "clean": true
+      }
+    },
+    "baseline-repeat": {
+      "before_start": {
+        "verified": true,
+        "released": true,
+        "waited_s": 0.0,
+        "readings": [
+          {
+            "t_s": 0.0,
+            "used_mib": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "release": {
+        "exit_code": 0,
+        "port_closed": true,
+        "gpu": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "clean": true
+      }
+    }
+  }
+}

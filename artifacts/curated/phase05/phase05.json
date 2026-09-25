@@ -1,0 +1,721 @@
+{
+  "phase": 5,
+  "branch": "phase-05-tuning",
+  "profile": "colab-t4",
+  "steps": {
+    "install": {
+      "ok": true,
+      "seconds": 310.2,
+      "vllm_version": "0.29.0"
+    },
+    "doctor": {
+      "environment": {
+        "platform": "Linux",
+        "platform_release": "6.12.90+",
+        "python_version": "3.12.13",
+        "in_wsl": false,
+        "in_container": true,
+        "cpu": {
+          "model": "Intel(R) Xeon(R) CPU @ 2.00GHz",
+          "cores": 2,
+          "threads": 4,
+          "flags": [
+            "avx",
+            "avx2",
+            "avx512bw",
+            "avx512f",
+            "f16c"
+          ]
+        },
+        "memory": {
+          "ram_total_gb": 31.35,
+          "ram_available_gb": 30.21,
+          "disk_free_gb": 19.5
+        },
+        "gpus": [
+          {
+            "index": 0,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          },
+          {
+            "index": 1,
+            "name": "Tesla T4",
+            "memory_total_gb": 15.0,
+            "compute_capability": "7.5",
+            "driver_version": "580.159.04"
+          }
+        ],
+        "docker_available": false,
+        "capabilities": {
+          "cuda": true,
+          "tensor_parallel": true,
+          "bfloat16": false,
+          "flash_attention_2": false,
+          "int4_marlin": false,
+          "fp8_quantization": false
+        },
+        "warnings": [
+          "Tesla T4 is compute capability 7.5: no bfloat16 support. Set engine.dtype=float16 explicitly - leaving it on 'auto' will make vLLM refuse to load a bf16 checkpoint."
+        ],
+        "notes": [
+          "Compute capability 7.5 is below 8.0, so vLLM's FlashAttention-2 backend is unavailable. Measured on vLLM 0.29 / T4: it selects TRITON_ATTN (candidates were TRITON_ATTN and FLEX_ATTENTION). Record which attention backend was active alongside every benchmark result - results are not comparable across backends.",
+          "No native FP8 tensor cores. Phase 6 quantisation should target AWQ or GPTQ int4 rather than FP8.",
+          "Marlin int4 kernels need compute capability 8.0+. AWQ/GPTQ still run here, on the slower generic kernels - factor that into any quantisation speedup claim.",
+          "2 GPUs visible: tensor_parallel_size up to 2 is testable in Phase 6.",
+          "15 GB of VRAM. A ~1.5B model in float16 leaves plenty of room for KV cache, which is what actually stresses continuous batching. Prefer a small model with a large batch over a large model."
+        ],
+        "recommended_profile": "kaggle-2xt4"
+      },
+      "issues": [
+        {
+          "severity": "info",
+          "field": "engine.backend",
+          "message": "FlashAttention-2 is unavailable on this GPU generation."
+        }
+      ]
+    }
+  },
+  "variants": {
+    "baseline": {
+      "variant": {
+        "name": "baseline",
+        "overrides": {
+          "max_num_seqs": 256
+        }
+      },
+      "status": "ok",
+      "gpu_clean_at_start": true,
+      "stripped_flags": [
+        "--device"
+      ],
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 721.3,
+      "steps": [
+        8.246,
+        12.4697,
+        16.4689,
+        19.9704,
+        24.0801
+      ],
+      "engine_self_report": {
+        "lines": [
+          "(EngineCore pid=289) ERROR 09-25 17:23:30 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+          "(EngineCore pid=289) INFO 09-25 17:23:34 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+          "(EngineCore pid=289) INFO 09-25 17:33:42 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/ae111ce08b/rank_0_0/backbone for vLLM's torch.compile",
+          "(EngineCore pid=289) INFO 09-25 17:33:56 [monitor.py:53] torch.compile took 20.11 s in total",
+          "(EngineCore pid=289) INFO 09-25 17:34:09 [gpu_worker.py:625] Available KV cache memory: 8.62 GiB",
+          "(EngineCore pid=289) INFO 09-25 17:34:09 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+          "(EngineCore pid=289) INFO 09-25 17:34:09 [kv_cache_utils.py:2032] GPU KV cache size: 322,944 tokens, Maximum concurrency for 4,096 tokens per request: 78.84x"
+        ],
+        "attention_backend": "TRITON_ATTN",
+        "kv_cache_tokens": 322944,
+        "kv_cache_memory_gib": 8.62,
+        "max_concurrency": 78.84
+      },
+      "released_cleanly": true,
+      "error": null
+    },
+    "max_num_seqs-32": {
+      "variant": {
+        "name": "max_num_seqs=32",
+        "overrides": {
+          "max_num_seqs": 32
+        }
+      },
+      "status": "ok",
+      "gpu_clean_at_start": true,
+      "stripped_flags": [
+        "--device"
+      ],
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "32",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 96.5,
+      "steps": [
+        8.246,
+        12.4697,
+        16.4689
+      ],
+      "engine_self_report": {
+        "lines": [
+          "(EngineCore pid=522) ERROR 09-25 17:38:12 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+          "(EngineCore pid=522) INFO 09-25 17:38:13 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+          "(EngineCore pid=522) INFO 09-25 17:38:26 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/f582b8ea49/rank_0_0/backbone for vLLM's torch.compile",
+          "(EngineCore pid=522) INFO 09-25 17:38:38 [monitor.py:53] torch.compile took 19.02 s in total",
+          "(EngineCore pid=522) INFO 09-25 17:38:48 [gpu_worker.py:625] Available KV cache memory: 9.43 GiB",
+          "(EngineCore pid=522) INFO 09-25 17:38:48 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8929 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9071. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+          "(EngineCore pid=522) INFO 09-25 17:38:48 [kv_cache_utils.py:2032] GPU KV cache size: 352,992 tokens, Maximum concurrency for 4,096 tokens per request: 86.18x"
+        ],
+        "attention_backend": "TRITON_ATTN",
+        "kv_cache_tokens": 352992,
+        "kv_cache_memory_gib": 9.43,
+        "max_concurrency": 86.18
+      },
+      "released_cleanly": true,
+      "error": null
+    },
+    "max_num_seqs-64": {
+      "variant": {
+        "name": "max_num_seqs=64",
+        "overrides": {
+          "max_num_seqs": 64
+        }
+      },
+      "status": "ok",
+      "gpu_clean_at_start": true,
+      "stripped_flags": [
+        "--device"
+      ],
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 98.5,
+      "steps": [
+        8.246,
+        12.4697,
+        16.4689,
+        19.9704
+      ],
+      "engine_self_report": {
+        "lines": [
+          "(EngineCore pid=717) ERROR 09-25 17:42:06 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+          "(EngineCore pid=717) INFO 09-25 17:42:08 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+          "(EngineCore pid=717) INFO 09-25 17:42:20 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/7697234758/rank_0_0/backbone for vLLM's torch.compile",
+          "(EngineCore pid=717) INFO 09-25 17:42:33 [monitor.py:53] torch.compile took 18.84 s in total",
+          "(EngineCore pid=717) INFO 09-25 17:42:43 [gpu_worker.py:625] Available KV cache memory: 9.38 GiB",
+          "(EngineCore pid=717) INFO 09-25 17:42:43 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8905 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9095. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+          "(EngineCore pid=717) INFO 09-25 17:42:43 [kv_cache_utils.py:2032] GPU KV cache size: 351,104 tokens, Maximum concurrency for 4,096 tokens per request: 85.72x"
+        ],
+        "attention_backend": "TRITON_ATTN",
+        "kv_cache_tokens": 351104,
+        "kv_cache_memory_gib": 9.38,
+        "max_concurrency": 85.72
+      },
+      "released_cleanly": true,
+      "error": null
+    },
+    "max_num_seqs-96": {
+      "variant": {
+        "name": "max_num_seqs=96",
+        "overrides": {
+          "max_num_seqs": 96
+        }
+      },
+      "status": "ok",
+      "gpu_clean_at_start": true,
+      "stripped_flags": [
+        "--device"
+      ],
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "96",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 102.6,
+      "steps": [
+        8.246,
+        12.4697,
+        16.4689,
+        19.9704,
+        24.0801
+      ],
+      "engine_self_report": {
+        "lines": [
+          "(EngineCore pid=913) ERROR 09-25 17:46:19 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+          "(EngineCore pid=913) INFO 09-25 17:46:21 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+          "(EngineCore pid=913) INFO 09-25 17:46:34 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/f402a2910c/rank_0_0/backbone for vLLM's torch.compile",
+          "(EngineCore pid=913) INFO 09-25 17:46:47 [monitor.py:53] torch.compile took 19.07 s in total",
+          "(EngineCore pid=913) INFO 09-25 17:46:58 [gpu_worker.py:625] Available KV cache memory: 9.31 GiB",
+          "(EngineCore pid=913) INFO 09-25 17:46:58 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8870 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9130. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+          "(EngineCore pid=913) INFO 09-25 17:46:58 [kv_cache_utils.py:2032] GPU KV cache size: 348,464 tokens, Maximum concurrency for 4,096 tokens per request: 85.07x"
+        ],
+        "attention_backend": "TRITON_ATTN",
+        "kv_cache_tokens": 348464,
+        "kv_cache_memory_gib": 9.31,
+        "max_concurrency": 85.07
+      },
+      "released_cleanly": true,
+      "error": null
+    },
+    "max_num_seqs-128": {
+      "variant": {
+        "name": "max_num_seqs=128",
+        "overrides": {
+          "max_num_seqs": 128
+        }
+      },
+      "status": "ok",
+      "gpu_clean_at_start": true,
+      "stripped_flags": [
+        "--device"
+      ],
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 102.7,
+      "steps": [
+        8.246,
+        12.4697,
+        16.4689,
+        19.9704,
+        24.0801
+      ],
+      "engine_self_report": {
+        "lines": [
+          "(EngineCore pid=1109) ERROR 09-25 17:51:06 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+          "(EngineCore pid=1109) INFO 09-25 17:51:08 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+          "(EngineCore pid=1109) INFO 09-25 17:51:20 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/b082b98067/rank_0_0/backbone for vLLM's torch.compile",
+          "(EngineCore pid=1109) INFO 09-25 17:51:33 [monitor.py:53] torch.compile took 18.95 s in total",
+          "(EngineCore pid=1109) INFO 09-25 17:51:45 [gpu_worker.py:625] Available KV cache memory: 9.21 GiB",
+          "(EngineCore pid=1109) INFO 09-25 17:51:45 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8815 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9185. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+          "(EngineCore pid=1109) INFO 09-25 17:51:45 [kv_cache_utils.py:2032] GPU KV cache size: 344,736 tokens, Maximum concurrency for 4,096 tokens per request: 84.16x"
+        ],
+        "attention_backend": "TRITON_ATTN",
+        "kv_cache_tokens": 344736,
+        "kv_cache_memory_gib": 9.21,
+        "max_concurrency": 84.16
+      },
+      "released_cleanly": true,
+      "error": null
+    },
+    "baseline-repeat": {
+      "variant": {
+        "name": "baseline-repeat",
+        "overrides": {
+          "max_num_seqs": 256
+        }
+      },
+      "status": "ok",
+      "gpu_clean_at_start": true,
+      "stripped_flags": [
+        "--device"
+      ],
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 86.5,
+      "steps": [
+        8.246,
+        12.4697,
+        16.4689,
+        19.9704,
+        24.0801
+      ],
+      "engine_self_report": {
+        "lines": [
+          "(EngineCore pid=1303) ERROR 09-25 17:55:49 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+          "(EngineCore pid=1303) INFO 09-25 17:55:51 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+          "(EngineCore pid=1303) INFO 09-25 17:55:57 [monitor.py:53] torch.compile took 0.22 s in total",
+          "(EngineCore pid=1303) INFO 09-25 17:56:10 [gpu_worker.py:625] Available KV cache memory: 9.04 GiB",
+          "(EngineCore pid=1303) INFO 09-25 17:56:10 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+          "(EngineCore pid=1303) INFO 09-25 17:56:10 [kv_cache_utils.py:2032] GPU KV cache size: 338,512 tokens, Maximum concurrency for 4,096 tokens per request: 82.64x"
+        ],
+        "attention_backend": "TRITON_ATTN",
+        "kv_cache_tokens": 338512,
+        "kv_cache_memory_gib": 9.04,
+        "max_concurrency": 82.64
+      },
+      "released_cleanly": true,
+      "error": null
+    }
+  },
+  "gpu_memory": {
+    "baseline_mib": 0.0,
+    "baseline_readings": [
+      0.0,
+      0.0
+    ],
+    "tolerance_mib": 256.0,
+    "variants": {
+      "baseline": {
+        "before_start": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "release": {
+          "exit_code": 0,
+          "port_closed": true,
+          "gpu": {
+            "verified": true,
+            "released": true,
+            "waited_s": 0.0,
+            "readings": [
+              {
+                "t_s": 0.0,
+                "used_mib": [
+                  0.0,
+                  0.0
+                ]
+              }
+            ]
+          },
+          "clean": true
+        }
+      },
+      "max_num_seqs-32": {
+        "before_start": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "release": {
+          "exit_code": 0,
+          "port_closed": true,
+          "gpu": {
+            "verified": true,
+            "released": true,
+            "waited_s": 0.0,
+            "readings": [
+              {
+                "t_s": 0.0,
+                "used_mib": [
+                  0.0,
+                  0.0
+                ]
+              }
+            ]
+          },
+          "clean": true
+        }
+      },
+      "max_num_seqs-64": {
+        "before_start": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "release": {
+          "exit_code": 0,
+          "port_closed": true,
+          "gpu": {
+            "verified": true,
+            "released": true,
+            "waited_s": 0.0,
+            "readings": [
+              {
+                "t_s": 0.0,
+                "used_mib": [
+                  0.0,
+                  0.0
+                ]
+              }
+            ]
+          },
+          "clean": true
+        }
+      },
+      "max_num_seqs-96": {
+        "before_start": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "release": {
+          "exit_code": 0,
+          "port_closed": true,
+          "gpu": {
+            "verified": true,
+            "released": true,
+            "waited_s": 0.0,
+            "readings": [
+              {
+                "t_s": 0.0,
+                "used_mib": [
+                  0.0,
+                  0.0
+                ]
+              }
+            ]
+          },
+          "clean": true
+        }
+      },
+      "max_num_seqs-128": {
+        "before_start": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "release": {
+          "exit_code": 0,
+          "port_closed": true,
+          "gpu": {
+            "verified": true,
+            "released": true,
+            "waited_s": 0.0,
+            "readings": [
+              {
+                "t_s": 0.0,
+                "used_mib": [
+                  0.0,
+                  0.0
+                ]
+              }
+            ]
+          },
+          "clean": true
+        }
+      },
+      "baseline-repeat": {
+        "before_start": {
+          "verified": true,
+          "released": true,
+          "waited_s": 0.0,
+          "readings": [
+            {
+              "t_s": 0.0,
+              "used_mib": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "release": {
+          "exit_code": 0,
+          "port_closed": true,
+          "gpu": {
+            "verified": true,
+            "released": true,
+            "waited_s": 0.0,
+            "readings": [
+              {
+                "t_s": 0.0,
+                "used_mib": [
+                  0.0,
+                  0.0
+                ]
+              }
+            ]
+          },
+          "clean": true
+        }
+      }
+    }
+  },
+  "plan": {
+    "variants": [
+      {
+        "name": "baseline",
+        "overrides": {
+          "max_num_seqs": 256
+        }
+      },
+      {
+        "name": "max_num_seqs=32",
+        "overrides": {
+          "max_num_seqs": 32
+        }
+      },
+      {
+        "name": "max_num_seqs=64",
+        "overrides": {
+          "max_num_seqs": 64
+        }
+      },
+      {
+        "name": "max_num_seqs=96",
+        "overrides": {
+          "max_num_seqs": 96
+        }
+      },
+      {
+        "name": "max_num_seqs=128",
+        "overrides": {
+          "max_num_seqs": 128
+        }
+      },
+      {
+        "name": "baseline-repeat",
+        "overrides": {
+          "max_num_seqs": 256
+        }
+      }
+    ],
+    "rates": [
+      8.0,
+      12.0,
+      16.0,
+      20.0,
+      24.0,
+      28.0,
+      32.0
+    ],
+    "step_duration_s": 30.0,
+    "prompt_tokens": 128,
+    "max_tokens": 128,
+    "slo": {
+      "ttft_s": 1.0,
+      "tpot_s": 0.05
+    },
+    "stop_after_unhealthy": 2,
+    "session_budget_s": 10800.0
+  },
+  "verdict": "interactive SLO (TTFT<1s, TPOT<0.05s): highest sustainable rate 16.47 req/s from baseline, max_num_seqs=96, max_num_seqs=128, baseline-repeat (tied) (peak goodput 13.80 req/s); frontier: baseline, baseline-repeat, max_num_seqs=128, max_num_seqs=96",
+  "verdict_batch": "batch SLO (TTFT<5s, TPOT<0.2s): highest sustainable rate 24.08 req/s from baseline-repeat (peak goodput 15.47 req/s); frontier: baseline-repeat",
+  "ok": true,
+  "total_seconds": 2614.1
+}

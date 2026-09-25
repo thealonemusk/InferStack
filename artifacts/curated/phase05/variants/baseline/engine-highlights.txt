@@ -1,0 +1,7 @@
+(EngineCore pid=289) ERROR 09-25 17:23:30 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8
+(EngineCore pid=289) INFO 09-25 17:23:34 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore pid=289) INFO 09-25 17:33:42 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/ae111ce08b/rank_0_0/backbone for vLLM's torch.compile
+(EngineCore pid=289) INFO 09-25 17:33:56 [monitor.py:53] torch.compile took 20.11 s in total
+(EngineCore pid=289) INFO 09-25 17:34:09 [gpu_worker.py:625] Available KV cache memory: 8.62 GiB
+(EngineCore pid=289) INFO 09-25 17:34:09 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=289) INFO 09-25 17:34:09 [kv_cache_utils.py:2032] GPU KV cache size: 322,944 tokens, Maximum concurrency for 4,096 tokens per request: 78.84x

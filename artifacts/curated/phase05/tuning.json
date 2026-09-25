@@ -1,0 +1,3277 @@
+{
+  "label": "qwen2.5-1.5b on Tesla T4",
+  "slo": {
+    "name": "interactive",
+    "ttft_s": 1.0,
+    "tpot_s": 0.05
+  },
+  "frontier": [
+    "baseline",
+    "baseline-repeat",
+    "max_num_seqs=128",
+    "max_num_seqs=96"
+  ],
+  "best_sustainable": "baseline",
+  "verdict": "interactive SLO (TTFT<1s, TPOT<0.05s): highest sustainable rate 16.47 req/s from baseline, max_num_seqs=96, max_num_seqs=128, baseline-repeat (tied) (peak goodput 13.80 req/s); frontier: baseline, baseline-repeat, max_num_seqs=128, max_num_seqs=96",
+  "variants": [
+    {
+      "name": "baseline",
+      "slug": "baseline",
+      "overrides": {
+        "max_num_seqs": 256
+      },
+      "ok": true,
+      "valid": true,
+      "error": null,
+      "generator_kept_up": true,
+      "max_sustainable_rate_per_s": 16.4689,
+      "peak_goodput_per_s": 13.8018,
+      "peak_goodput_at_rate_per_s": 16.4689,
+      "peak_output_tokens_per_s": 1975.84,
+      "ttft_p99_at_sustainable_s": 0.1529769640238854,
+      "peak_running_batch": 255.0,
+      "startup_s": 721.2879284149999,
+      "on_frontier": true
+    },
+    {
+      "name": "max_num_seqs=32",
+      "slug": "max_num_seqs-32",
+      "overrides": {
+        "max_num_seqs": 32
+      },
+      "ok": true,
+      "valid": true,
+      "error": null,
+      "generator_kept_up": true,
+      "max_sustainable_rate_per_s": 8.246,
+      "peak_goodput_per_s": 7.0728,
+      "peak_goodput_at_rate_per_s": 8.246,
+      "peak_output_tokens_per_s": 1071.08,
+      "ttft_p99_at_sustainable_s": 0.3278032155440691,
+      "peak_running_batch": 32.0,
+      "startup_s": 96.51481954499991,
+      "on_frontier": false
+    },
+    {
+      "name": "max_num_seqs=64",
+      "slug": "max_num_seqs-64",
+      "overrides": {
+        "max_num_seqs": 64
+      },
+      "ok": true,
+      "valid": true,
+      "error": null,
+      "generator_kept_up": true,
+      "max_sustainable_rate_per_s": 12.4697,
+      "peak_goodput_per_s": 10.5026,
+      "peak_goodput_at_rate_per_s": 12.4697,
+      "peak_output_tokens_per_s": 1591.77,
+      "ttft_p99_at_sustainable_s": 0.12598359786923297,
+      "peak_running_batch": 64.0,
+      "startup_s": 98.5463833880001,
+      "on_frontier": false
+    },
+    {
+      "name": "max_num_seqs=96",
+      "slug": "max_num_seqs-96",
+      "overrides": {
+        "max_num_seqs": 96
+      },
+      "ok": true,
+      "valid": true,
+      "error": null,
+      "generator_kept_up": true,
+      "max_sustainable_rate_per_s": 16.4689,
+      "peak_goodput_per_s": 13.8018,
+      "peak_goodput_at_rate_per_s": 16.4689,
+      "peak_output_tokens_per_s": 1933.38,
+      "ttft_p99_at_sustainable_s": 0.41683380447721774,
+      "peak_running_batch": 96.0,
+      "startup_s": 102.59087114099975,
+      "on_frontier": true
+    },
+    {
+      "name": "max_num_seqs=128",
+      "slug": "max_num_seqs-128",
+      "overrides": {
+        "max_num_seqs": 128
+      },
+      "ok": true,
+      "valid": true,
+      "error": null,
+      "generator_kept_up": true,
+      "max_sustainable_rate_per_s": 16.4689,
+      "peak_goodput_per_s": 13.8018,
+      "peak_goodput_at_rate_per_s": 16.4689,
+      "peak_output_tokens_per_s": 1959.1,
+      "ttft_p99_at_sustainable_s": 0.15879504090343133,
+      "peak_running_batch": 128.0,
+      "startup_s": 102.66599901200016,
+      "on_frontier": true
+    },
+    {
+      "name": "baseline-repeat",
+      "slug": "baseline-repeat",
+      "overrides": {
+        "max_num_seqs": 256
+      },
+      "ok": true,
+      "valid": true,
+      "error": null,
+      "generator_kept_up": true,
+      "max_sustainable_rate_per_s": 16.4689,
+      "peak_goodput_per_s": 13.8018,
+      "peak_goodput_at_rate_per_s": 16.4689,
+      "peak_output_tokens_per_s": 1980.11,
+      "ttft_p99_at_sustainable_s": 0.16264126353828345,
+      "peak_running_batch": 255.0,
+      "startup_s": 86.51724760699972,
+      "on_frontier": true
+    }
+  ],
+  "results": [
+    {
+      "variant": {
+        "name": "baseline",
+        "overrides": {
+          "max_num_seqs": 256
+        }
+      },
+      "slug": "baseline",
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 721.2879284149999,
+      "error": null,
+      "ok": true,
+      "valid": true,
+      "generator_kept_up": true,
+      "on_frontier": true,
+      "report": {
+        "label": "baseline - qwen2.5-1.5b on Tesla T4",
+        "slo": {
+          "name": "interactive",
+          "ttft_s": 1.0,
+          "tpot_s": 0.05
+        },
+        "meta": {
+          "model": "qwen2.5-1.5b",
+          "base_url": "http://127.0.0.1:8000/v1",
+          "config": {
+            "rates": [
+              8.0,
+              12.0,
+              16.0,
+              20.0,
+              24.0,
+              28.0,
+              32.0
+            ],
+            "duration_s": 30.0,
+            "workload": {
+              "approx_prompt_tokens": 128,
+              "max_tokens": 128,
+              "temperature": 0.0,
+              "ignore_eos": true
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "seed": 1337,
+            "warmup_requests": 4,
+            "metrics_url": "http://127.0.0.1:8000",
+            "stop_after_unhealthy": 2
+          },
+          "skipped_rates": [
+            28.0,
+            32.0
+          ],
+          "variant": {
+            "name": "baseline",
+            "overrides": {
+              "max_num_seqs": 256
+            }
+          },
+          "engine_command": [
+            "vllm",
+            "serve",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "--served-model-name",
+            "qwen2.5-1.5b",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+            "--dtype",
+            "float16",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "256",
+            "--max-num-batched-tokens",
+            "8192",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--enable-chunked-prefill"
+          ],
+          "engine_self_report": {
+            "lines": [
+              "(EngineCore pid=289) ERROR 09-25 17:23:30 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+              "(EngineCore pid=289) INFO 09-25 17:23:34 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+              "(EngineCore pid=289) INFO 09-25 17:33:42 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/ae111ce08b/rank_0_0/backbone for vLLM's torch.compile",
+              "(EngineCore pid=289) INFO 09-25 17:33:56 [monitor.py:53] torch.compile took 20.11 s in total",
+              "(EngineCore pid=289) INFO 09-25 17:34:09 [gpu_worker.py:625] Available KV cache memory: 8.62 GiB",
+              "(EngineCore pid=289) INFO 09-25 17:34:09 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+              "(EngineCore pid=289) INFO 09-25 17:34:09 [kv_cache_utils.py:2032] GPU KV cache size: 322,944 tokens, Maximum concurrency for 4,096 tokens per request: 78.84x"
+            ],
+            "attention_backend": "TRITON_ATTN",
+            "kv_cache_tokens": 322944,
+            "kv_cache_memory_gib": 8.62,
+            "max_concurrency": 78.84
+          }
+        },
+        "max_sustainable_rate_per_s": 16.4689,
+        "peak_goodput_per_s": 13.8018,
+        "peak_goodput_at_rate_per_s": 16.4689,
+        "peak_output_tokens_per_s": 1975.84,
+        "peak_throughput_at_rate_per_s": 19.9704,
+        "generator_kept_up": true,
+        "held_outside_engine_at_rates": [],
+        "steps": [
+          {
+            "offered_rate_per_s": 8.246,
+            "requested_rate_per_s": 8.0,
+            "wall_clock_s": 32.8336,
+            "sent": 246,
+            "completed": 246,
+            "failed": 0,
+            "met_slo": 246,
+            "completed_rate_per_s": 7.0392,
+            "goodput_per_s": 7.0392,
+            "output_tokens_per_s": 901.02,
+            "drain_overshoot": 1.101,
+            "ttft_p50_s": 0.07734874934087,
+            "ttft_p90_s": 0.08831423703012575,
+            "ttft_p95_s": 0.09141883610475432,
+            "ttft_p99_s": 0.09538783860550382,
+            "tpot_p50_s": 0.02602187512800083,
+            "tpot_p99_s": 0.027900624439998866,
+            "e2e_p50_s": 3.3358808027765754,
+            "e2e_p99_s": 3.5679239071606013,
+            "max_schedule_lag_s": 0.0096,
+            "ttft_p99_send_clock_s": 0.09319527699994978,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 64,
+              "peak": {
+                "running": 34.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.00961204974483476
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 31488.0,
+              "prompt_tokens_delta": 38130.0,
+              "engine_ttft_p99_cumulative_s": 1.5625,
+              "engine_itl_p99_cumulative_s": 0.04960790941992561,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 32.848,
+              "ttft_step": {
+                "count": 246,
+                "p50_s": 0.06891304347826087,
+                "p99_s": 0.09765714285714286,
+                "mean_s": 0.06771457195281982
+              },
+              "queue_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.0856910568313985e-05
+              },
+              "prefill_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.051758314487797843
+              },
+              "decode_time_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.2295138508861827
+              },
+              "tpot_step": {
+                "count": 246,
+                "p50_s": 0.0336436170212766,
+                "p99_s": 0.049672872340425535,
+                "mean_s": 0.02542924292036361
+              },
+              "e2e_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.2972864523166563
+              },
+              "requests_completed_step": 246,
+              "settled_in_s": 0.02
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 36,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 12.4697,
+            "requested_rate_per_s": 12.0,
+            "wall_clock_s": 33.3798,
+            "sent": 374,
+            "completed": 374,
+            "failed": 0,
+            "met_slo": 374,
+            "completed_rate_per_s": 10.5359,
+            "goodput_per_s": 10.5359,
+            "output_tokens_per_s": 1348.6,
+            "drain_overshoot": 1.113,
+            "ttft_p50_s": 0.09611671126558896,
+            "ttft_p90_s": 0.11052209682438985,
+            "ttft_p95_s": 0.11494441376043696,
+            "ttft_p99_s": 0.11983414439670526,
+            "tpot_p50_s": 0.03288597358399966,
+            "tpot_p99_s": 0.034522251704000154,
+            "e2e_p50_s": 4.207220392728541,
+            "e2e_p99_s": 4.415702061680459,
+            "max_schedule_lag_s": 0.010045,
+            "ttft_p99_send_clock_s": 0.11871086800010744,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 61.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.016251300599514407
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 47872.0,
+              "prompt_tokens_delta": 57970.0,
+              "engine_ttft_p99_cumulative_s": 0.23599999999999993,
+              "engine_itl_p99_cumulative_s": 0.04969902960878476,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.395,
+              "ttft_step": {
+                "count": 374,
+                "p50_s": 0.08345177664974619,
+                "p99_s": 0.22662499999999994,
+                "mean_s": 0.08185754612805371
+              },
+              "queue_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.1481898391844335e-05
+              },
+              "prefill_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.06313118489304587
+              },
+              "decode_time_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.008432496224611
+              },
+              "tpot_step": {
+                "count": 374,
+                "p50_s": 0.037156593406593406,
+                "p99_s": 0.04974313186813187,
+                "mean_s": 0.03156246060019369
+              },
+              "e2e_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.090252961704437
+              },
+              "requests_completed_step": 374,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 64,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 16.4689,
+            "requested_rate_per_s": 16.0,
+            "wall_clock_s": 33.5731,
+            "sent": 494,
+            "completed": 494,
+            "failed": 0,
+            "met_slo": 494,
+            "completed_rate_per_s": 13.8018,
+            "goodput_per_s": 13.8018,
+            "output_tokens_per_s": 1766.63,
+            "drain_overshoot": 1.119,
+            "ttft_p50_s": 0.11786041536896619,
+            "ttft_p90_s": 0.13757058310876147,
+            "ttft_p95_s": 0.14142907860862408,
+            "ttft_p99_s": 0.1529769640238854,
+            "tpot_p50_s": 0.03958448487199894,
+            "tpot_p99_s": 0.04223387284800083,
+            "e2e_p50_s": 5.075105437556131,
+            "e2e_p99_s": 5.421609179549073,
+            "max_schedule_lag_s": 0.025488,
+            "ttft_p99_send_clock_s": 0.1494299050000336,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 102.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.02621017688153393
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 63232.0,
+              "prompt_tokens_delta": 76570.0,
+              "engine_ttft_p99_cumulative_s": 0.2451486486486486,
+              "engine_itl_p99_cumulative_s": 0.04973872701085753,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.588,
+              "ttft_step": {
+                "count": 494,
+                "p50_s": 0.09579399141630901,
+                "p99_s": 0.24625757575757576,
+                "mean_s": 0.0961807256768107
+              },
+              "queue_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.1826864370271246e-05
+              },
+              "prefill_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.07548678487651463
+              },
+              "decode_time_step": {
+                "count": 494,
+                "p50_s": 4.729241877256317,
+                "p99_s": 9.886175115207372,
+                "mean_s": 4.805823607864377
+              },
+              "tpot_step": {
+                "count": 494,
+                "p50_s": 0.03724173553719008,
+                "p99_s": 0.049744834710743806,
+                "mean_s": 0.03784113077058557
+              },
+              "e2e_step": {
+                "count": 494,
+                "p50_s": 5.391791044776119,
+                "p99_s": 9.907835820895523,
+                "mean_s": 4.901971666436446
+              },
+              "requests_completed_step": 494,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 105,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 19.9704,
+            "requested_rate_per_s": 20.0,
+            "wall_clock_s": 34.754,
+            "sent": 599,
+            "completed": 599,
+            "failed": 0,
+            "met_slo": 222,
+            "completed_rate_per_s": 15.4362,
+            "goodput_per_s": 5.5677,
+            "output_tokens_per_s": 1975.84,
+            "drain_overshoot": 1.159,
+            "ttft_p50_s": 0.1716690682448032,
+            "ttft_p90_s": 0.21684235954350228,
+            "ttft_p95_s": 0.22489591350375449,
+            "ttft_p99_s": 0.23866867931699787,
+            "tpot_p50_s": 0.0558935992480001,
+            "tpot_p99_s": 0.06499653133599895,
+            "e2e_p50_s": 7.161892448339007,
+            "e2e_p99_s": 8.354255604920109,
+            "max_schedule_lag_s": 0.045057,
+            "ttft_p99_send_clock_s": 0.2341285269999389,
+            "slo_attainment": 0.3706,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 66,
+              "peak": {
+                "running": 181.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.047019769112619514
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 76672.0,
+              "prompt_tokens_delta": 92845.0,
+              "engine_ttft_p99_cumulative_s": 0.2471978723404255,
+              "engine_itl_p99_cumulative_s": 0.0738032215046179,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 34.771,
+              "ttft_step": {
+                "count": 599,
+                "p50_s": 0.15698757763975157,
+                "p99_s": 0.24813975155279502,
+                "mean_s": 0.13086736978393962
+              },
+              "queue_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.4035606013392388e-05
+              },
+              "prefill_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.10439952150417084
+              },
+              "decode_time_step": {
+                "count": 599,
+                "p50_s": 7.142175572519084,
+                "p99_s": 9.94284351145038,
+                "mean_s": 6.687088434230374
+              },
+              "tpot_step": {
+                "count": 599,
+                "p50_s": 0.05459809264305177,
+                "p99_s": 0.07459196185286103,
+                "mean_s": 0.05265423963960942
+              },
+              "e2e_step": {
+                "count": 599,
+                "p50_s": 7.1745283018867925,
+                "p99_s": 9.943490566037736,
+                "mean_s": 6.817958647102267
+              },
+              "requests_completed_step": 599,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 186,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 24.0801,
+            "requested_rate_per_s": 24.0,
+            "wall_clock_s": 37.3825,
+            "sent": 719,
+            "completed": 719,
+            "failed": 0,
+            "met_slo": 74,
+            "completed_rate_per_s": 15.071,
+            "goodput_per_s": 2.4783,
+            "output_tokens_per_s": 1929.09,
+            "drain_overshoot": 1.252,
+            "ttft_p50_s": 0.23365113027512763,
+            "ttft_p90_s": 0.33376809250156825,
+            "ttft_p95_s": 0.4570953606970427,
+            "ttft_p99_s": 0.8264744968750541,
+            "tpot_p50_s": 0.07764100464799958,
+            "tpot_p99_s": 0.09346574344800138,
+            "e2e_p50_s": 10.001993283596514,
+            "e2e_p99_s": 12.018191742213734,
+            "max_schedule_lag_s": 0.04643,
+            "ttft_p99_send_clock_s": 0.8257179679999354,
+            "slo_attainment": 0.1029,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 71,
+              "peak": {
+                "running": 255.0,
+                "waiting": 12.0,
+                "kv_cache_usage": 0.06614477530595053
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 92032.0,
+              "prompt_tokens_delta": 111445.0,
+              "engine_ttft_p99_cumulative_s": 0.5133333333333306,
+              "engine_itl_p99_cumulative_s": 0.12143700277520839,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 37.402,
+              "ttft_step": {
+                "count": 719,
+                "p50_s": 0.17600190839694657,
+                "p99_s": 0.8002777777777763,
+                "mean_s": 0.19620287169667378
+              },
+              "queue_time_step": {
+                "count": 719,
+                "p50_s": 0.15407142857142855,
+                "p99_s": 0.4574666666666659,
+                "mean_s": 0.01921566985535823
+              },
+              "prefill_time_step": {
+                "count": 719,
+                "p50_s": 0.15,
+                "p99_s": 0.29699999999999993,
+                "mean_s": 0.14302967249791557
+              },
+              "decode_time_step": {
+                "count": 719,
+                "p50_s": 9.480609418282548,
+                "p99_s": 14.88835403726708,
+                "mean_s": 9.24828633412377
+              },
+              "tpot_step": {
+                "count": 719,
+                "p50_s": 0.07677648578811369,
+                "p99_s": 0.09953552971576227,
+                "mean_s": 0.07282115223719504
+              },
+              "e2e_step": {
+                "count": 719,
+                "p50_s": 9.873887240356083,
+                "p99_s": 14.897578347578346,
+                "mean_s": 9.44431566363084
+              },
+              "requests_completed_step": 719,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 273,
+            "held_outside_engine": false
+          }
+        ]
+      }
+    },
+    {
+      "variant": {
+        "name": "max_num_seqs=32",
+        "overrides": {
+          "max_num_seqs": 32
+        }
+      },
+      "slug": "max_num_seqs-32",
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "32",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 96.51481954499991,
+      "error": null,
+      "ok": true,
+      "valid": true,
+      "generator_kept_up": true,
+      "on_frontier": false,
+      "report": {
+        "label": "max_num_seqs=32 - qwen2.5-1.5b on Tesla T4",
+        "slo": {
+          "name": "interactive",
+          "ttft_s": 1.0,
+          "tpot_s": 0.05
+        },
+        "meta": {
+          "model": "qwen2.5-1.5b",
+          "base_url": "http://127.0.0.1:8000/v1",
+          "config": {
+            "rates": [
+              8.0,
+              12.0,
+              16.0,
+              20.0,
+              24.0,
+              28.0,
+              32.0
+            ],
+            "duration_s": 30.0,
+            "workload": {
+              "approx_prompt_tokens": 128,
+              "max_tokens": 128,
+              "temperature": 0.0,
+              "ignore_eos": true
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "seed": 1337,
+            "warmup_requests": 4,
+            "metrics_url": "http://127.0.0.1:8000",
+            "stop_after_unhealthy": 2
+          },
+          "skipped_rates": [
+            20.0,
+            24.0,
+            28.0,
+            32.0
+          ],
+          "variant": {
+            "name": "max_num_seqs=32",
+            "overrides": {
+              "max_num_seqs": 32
+            }
+          },
+          "engine_command": [
+            "vllm",
+            "serve",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "--served-model-name",
+            "qwen2.5-1.5b",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+            "--dtype",
+            "float16",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "32",
+            "--max-num-batched-tokens",
+            "8192",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--enable-chunked-prefill"
+          ],
+          "engine_self_report": {
+            "lines": [
+              "(EngineCore pid=522) ERROR 09-25 17:38:12 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+              "(EngineCore pid=522) INFO 09-25 17:38:13 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+              "(EngineCore pid=522) INFO 09-25 17:38:26 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/f582b8ea49/rank_0_0/backbone for vLLM's torch.compile",
+              "(EngineCore pid=522) INFO 09-25 17:38:38 [monitor.py:53] torch.compile took 19.02 s in total",
+              "(EngineCore pid=522) INFO 09-25 17:38:48 [gpu_worker.py:625] Available KV cache memory: 9.43 GiB",
+              "(EngineCore pid=522) INFO 09-25 17:38:48 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8929 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9071. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+              "(EngineCore pid=522) INFO 09-25 17:38:48 [kv_cache_utils.py:2032] GPU KV cache size: 352,992 tokens, Maximum concurrency for 4,096 tokens per request: 86.18x"
+            ],
+            "attention_backend": "TRITON_ATTN",
+            "kv_cache_tokens": 352992,
+            "kv_cache_memory_gib": 9.43,
+            "max_concurrency": 86.18
+          }
+        },
+        "max_sustainable_rate_per_s": 8.246,
+        "peak_goodput_per_s": 7.0728,
+        "peak_goodput_at_rate_per_s": 8.246,
+        "peak_output_tokens_per_s": 1071.08,
+        "peak_throughput_at_rate_per_s": 16.4689,
+        "generator_kept_up": true,
+        "held_outside_engine_at_rates": [],
+        "steps": [
+          {
+            "offered_rate_per_s": 8.246,
+            "requested_rate_per_s": 8.0,
+            "wall_clock_s": 32.9044,
+            "sent": 246,
+            "completed": 246,
+            "failed": 0,
+            "met_slo": 246,
+            "completed_rate_per_s": 7.0728,
+            "goodput_per_s": 7.0728,
+            "output_tokens_per_s": 905.31,
+            "drain_overshoot": 1.103,
+            "ttft_p50_s": 0.07926150792819797,
+            "ttft_p90_s": 0.1111695457372619,
+            "ttft_p95_s": 0.17217259186463352,
+            "ttft_p99_s": 0.3278032155440691,
+            "tpot_p50_s": 0.026036639088000812,
+            "tpot_p99_s": 0.02754269901599946,
+            "e2e_p50_s": 3.339460309520586,
+            "e2e_p99_s": 3.6808125637178897,
+            "max_schedule_lag_s": 0.004416,
+            "ttft_p99_send_clock_s": 0.3271002970000154,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 64,
+              "peak": {
+                "running": 32.0,
+                "waiting": 1.0,
+                "kv_cache_usage": 0.008340510402973567
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 31488.0,
+              "prompt_tokens_delta": 38130.0,
+              "engine_ttft_p99_cumulative_s": 1.5625,
+              "engine_itl_p99_cumulative_s": 0.049607905982905987,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 32.919,
+              "ttft_step": {
+                "count": 246,
+                "p50_s": 0.06943661971830986,
+                "p99_s": 0.39749999999999963,
+                "mean_s": 0.08093330046025718
+              },
+              "queue_time_step": {
+                "count": 246,
+                "p50_s": 0.15061224489795919,
+                "p99_s": 0.29821224489795917,
+                "mean_s": 0.013237434430898358
+              },
+              "prefill_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.05167887637804409
+              },
+              "decode_time_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.2109218405447177
+              },
+              "tpot_step": {
+                "count": 246,
+                "p50_s": 0.03282122905027933,
+                "p99_s": 0.04965642458100559,
+                "mean_s": 0.025282849138147385
+              },
+              "e2e_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.2918468083792587
+              },
+              "requests_completed_step": 246,
+              "settled_in_s": 0.02
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 35,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 12.4697,
+            "requested_rate_per_s": 12.0,
+            "wall_clock_s": 43.5122,
+            "sent": 374,
+            "completed": 374,
+            "failed": 0,
+            "met_slo": 67,
+            "completed_rate_per_s": 8.0686,
+            "goodput_per_s": 2.2339,
+            "output_tokens_per_s": 1032.79,
+            "drain_overshoot": 1.451,
+            "ttft_p50_s": 4.601174580558302,
+            "ttft_p90_s": 9.641858583707872,
+            "ttft_p95_s": 9.914840239549918,
+            "ttft_p99_s": 10.788577569792956,
+            "tpot_p50_s": 0.027656053744000018,
+            "tpot_p99_s": 0.02813706196000021,
+            "e2e_p50_s": 8.064338015558372,
+            "e2e_p99_s": 13.650237615792953,
+            "max_schedule_lag_s": 0.008606,
+            "ttft_p99_send_clock_s": 10.788345887000105,
+            "slo_attainment": 0.1791,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 84,
+              "peak": {
+                "running": 32.0,
+                "waiting": 99.0,
+                "kv_cache_usage": 0.00861248356828792
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 47872.0,
+              "prompt_tokens_delta": 57970.0,
+              "engine_ttft_p99_cumulative_s": 15.839999999999995,
+              "engine_itl_p99_cumulative_s": 0.04969544869907487,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 43.527,
+              "ttft_step": {
+                "count": 374,
+                "p50_s": 4.596774193548387,
+                "p99_s": 17.50666666666666,
+                "mean_s": 4.902225718141239
+              },
+              "queue_time_step": {
+                "count": 374,
+                "p50_s": 4.596774193548387,
+                "p99_s": 13.75333333333333,
+                "mean_s": 4.8307385237646985
+              },
+              "prefill_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.05484332809893315
+              },
+              "decode_time_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 3.421082142216591
+              },
+              "tpot_step": {
+                "count": 374,
+                "p50_s": 0.036642857142857144,
+                "p99_s": 0.04973285714285715,
+                "mean_s": 0.02693765466312276
+              },
+              "e2e_step": {
+                "count": 374,
+                "p50_s": 8.41614906832298,
+                "p99_s": 14.8625,
+                "mean_s": 8.32339417296935
+              },
+              "requests_completed_step": 374,
+              "settled_in_s": 0.02
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 132,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 16.4689,
+            "requested_rate_per_s": 16.0,
+            "wall_clock_s": 56.2669,
+            "sent": 494,
+            "completed": 494,
+            "failed": 0,
+            "met_slo": 40,
+            "completed_rate_per_s": 8.3678,
+            "goodput_per_s": 1.3335,
+            "output_tokens_per_s": 1071.08,
+            "drain_overshoot": 1.876,
+            "ttft_p50_s": 11.052393232593449,
+            "ttft_p90_s": 21.08826070681708,
+            "ttft_p95_s": 22.87538603494742,
+            "ttft_p99_s": 23.30561494258336,
+            "tpot_p50_s": 0.02758628382400093,
+            "tpot_p99_s": 0.027848861296000903,
+            "e2e_p50_s": 14.521175363593347,
+            "e2e_p99_s": 26.444984176395884,
+            "max_schedule_lag_s": 0.052268,
+            "ttft_p99_send_clock_s": 23.30512252099993,
+            "slo_attainment": 0.081,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 109,
+              "peak": {
+                "running": 32.0,
+                "waiting": 215.0,
+                "kv_cache_usage": 0.009111101038030922
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 63232.0,
+              "prompt_tokens_delta": 76570.0,
+              "engine_ttft_p99_cumulative_s": 36.93698630136984,
+              "engine_itl_p99_cumulative_s": 0.0497148389307745,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 56.282,
+              "ttft_step": {
+                "count": 494,
+                "p50_s": 10.984455958549223,
+                "p99_s": 38.64657534246575,
+                "mean_s": 11.243961923035533
+              },
+              "queue_time_step": {
+                "count": 494,
+                "p50_s": 10.978260869565217,
+                "p99_s": 29.304225352112674,
+                "mean_s": 11.17248951145952
+              },
+              "prefill_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.054902790299590803
+              },
+              "decode_time_step": {
+                "count": 494,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 3.4211679371417065
+              },
+              "tpot_step": {
+                "count": 494,
+                "p50_s": 0.03691737288135594,
+                "p99_s": 0.04973834745762712,
+                "mean_s": 0.026938330213714303
+              },
+              "e2e_step": {
+                "count": 494,
+                "p50_s": 14.607843137254902,
+                "p99_s": 29.63407407407407,
+                "mean_s": 14.665222596543037
+              },
+              "requests_completed_step": 494,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 247,
+            "held_outside_engine": false
+          }
+        ]
+      }
+    },
+    {
+      "variant": {
+        "name": "max_num_seqs=64",
+        "overrides": {
+          "max_num_seqs": 64
+        }
+      },
+      "slug": "max_num_seqs-64",
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 98.5463833880001,
+      "error": null,
+      "ok": true,
+      "valid": true,
+      "generator_kept_up": true,
+      "on_frontier": false,
+      "report": {
+        "label": "max_num_seqs=64 - qwen2.5-1.5b on Tesla T4",
+        "slo": {
+          "name": "interactive",
+          "ttft_s": 1.0,
+          "tpot_s": 0.05
+        },
+        "meta": {
+          "model": "qwen2.5-1.5b",
+          "base_url": "http://127.0.0.1:8000/v1",
+          "config": {
+            "rates": [
+              8.0,
+              12.0,
+              16.0,
+              20.0,
+              24.0,
+              28.0,
+              32.0
+            ],
+            "duration_s": 30.0,
+            "workload": {
+              "approx_prompt_tokens": 128,
+              "max_tokens": 128,
+              "temperature": 0.0,
+              "ignore_eos": true
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "seed": 1337,
+            "warmup_requests": 4,
+            "metrics_url": "http://127.0.0.1:8000",
+            "stop_after_unhealthy": 2
+          },
+          "skipped_rates": [
+            24.0,
+            28.0,
+            32.0
+          ],
+          "variant": {
+            "name": "max_num_seqs=64",
+            "overrides": {
+              "max_num_seqs": 64
+            }
+          },
+          "engine_command": [
+            "vllm",
+            "serve",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "--served-model-name",
+            "qwen2.5-1.5b",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+            "--dtype",
+            "float16",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "64",
+            "--max-num-batched-tokens",
+            "8192",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--enable-chunked-prefill"
+          ],
+          "engine_self_report": {
+            "lines": [
+              "(EngineCore pid=717) ERROR 09-25 17:42:06 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+              "(EngineCore pid=717) INFO 09-25 17:42:08 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+              "(EngineCore pid=717) INFO 09-25 17:42:20 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/7697234758/rank_0_0/backbone for vLLM's torch.compile",
+              "(EngineCore pid=717) INFO 09-25 17:42:33 [monitor.py:53] torch.compile took 18.84 s in total",
+              "(EngineCore pid=717) INFO 09-25 17:42:43 [gpu_worker.py:625] Available KV cache memory: 9.38 GiB",
+              "(EngineCore pid=717) INFO 09-25 17:42:43 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8905 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9095. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+              "(EngineCore pid=717) INFO 09-25 17:42:43 [kv_cache_utils.py:2032] GPU KV cache size: 351,104 tokens, Maximum concurrency for 4,096 tokens per request: 85.72x"
+            ],
+            "attention_backend": "TRITON_ATTN",
+            "kv_cache_tokens": 351104,
+            "kv_cache_memory_gib": 9.38,
+            "max_concurrency": 85.72
+          }
+        },
+        "max_sustainable_rate_per_s": 12.4697,
+        "peak_goodput_per_s": 10.5026,
+        "peak_goodput_at_rate_per_s": 12.4697,
+        "peak_output_tokens_per_s": 1591.77,
+        "peak_throughput_at_rate_per_s": 19.9704,
+        "generator_kept_up": true,
+        "held_outside_engine_at_rates": [],
+        "steps": [
+          {
+            "offered_rate_per_s": 8.246,
+            "requested_rate_per_s": 8.0,
+            "wall_clock_s": 32.8066,
+            "sent": 246,
+            "completed": 246,
+            "failed": 0,
+            "met_slo": 246,
+            "completed_rate_per_s": 7.0728,
+            "goodput_per_s": 7.0728,
+            "output_tokens_per_s": 905.31,
+            "drain_overshoot": 1.1,
+            "ttft_p50_s": 0.07624800194149017,
+            "ttft_p90_s": 0.08879483493982399,
+            "ttft_p95_s": 0.09128959366722,
+            "ttft_p99_s": 0.09553789534749413,
+            "tpot_p50_s": 0.02584457245599697,
+            "tpot_p99_s": 0.02756527129599999,
+            "e2e_p50_s": 3.314662101337319,
+            "e2e_p99_s": 3.5289953971947305,
+            "max_schedule_lag_s": 0.00794,
+            "ttft_p99_send_clock_s": 0.09430412800020349,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 64,
+              "peak": {
+                "running": 33.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.008567652554345329
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 31488.0,
+              "prompt_tokens_delta": 38130.0,
+              "engine_ttft_p99_cumulative_s": 1.5625,
+              "engine_itl_p99_cumulative_s": 0.049588914336860954,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 32.821,
+              "ttft_step": {
+                "count": 246,
+                "p50_s": 0.0680952380952381,
+                "p99_s": 0.09786086956521739,
+                "mean_s": 0.06690474738919638
+              },
+              "queue_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.0867394298028506e-05
+              },
+              "prefill_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.0514784668211551
+              },
+              "decode_time_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.201488000650404
+              },
+              "tpot_step": {
+                "count": 246,
+                "p50_s": 0.031804733727810654,
+                "p99_s": 0.049636094674556215,
+                "mean_s": 0.025208566934255144
+              },
+              "e2e_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.268350098191238
+              },
+              "requests_completed_step": 246,
+              "settled_in_s": 0.02
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 35,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 12.4697,
+            "requested_rate_per_s": 12.0,
+            "wall_clock_s": 33.4055,
+            "sent": 374,
+            "completed": 374,
+            "failed": 0,
+            "met_slo": 374,
+            "completed_rate_per_s": 10.5026,
+            "goodput_per_s": 10.5026,
+            "output_tokens_per_s": 1344.33,
+            "drain_overshoot": 1.114,
+            "ttft_p50_s": 0.09608663736272582,
+            "ttft_p90_s": 0.11350417076384822,
+            "ttft_p95_s": 0.11645021319295168,
+            "ttft_p99_s": 0.12598359786923297,
+            "tpot_p50_s": 0.03314349613599916,
+            "tpot_p99_s": 0.03496919591999904,
+            "e2e_p50_s": 4.241082438642561,
+            "e2e_p99_s": 4.477522637988962,
+            "max_schedule_lag_s": 0.010298,
+            "ttft_p99_send_clock_s": 0.12511729900006685,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 63.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.014902246730164492
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 47872.0,
+              "prompt_tokens_delta": 57970.0,
+              "engine_ttft_p99_cumulative_s": 0.2375555555555555,
+              "engine_itl_p99_cumulative_s": 0.04969527719309107,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.421,
+              "ttft_step": {
+                "count": 374,
+                "p50_s": 0.08375634517766498,
+                "p99_s": 0.2292222222222222,
+                "mean_s": 0.08222922858069925
+              },
+              "queue_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.1546965238680555e-05
+              },
+              "prefill_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.06358225599197347
+              },
+              "decode_time_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.030511499569527
+              },
+              "tpot_step": {
+                "count": 374,
+                "p50_s": 0.037156593406593406,
+                "p99_s": 0.04974313186813187,
+                "mean_s": 0.031736311020232465
+              },
+              "e2e_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.11274355618074
+              },
+              "requests_completed_step": 374,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 65,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 16.4689,
+            "requested_rate_per_s": 16.0,
+            "wall_clock_s": 37.827,
+            "sent": 494,
+            "completed": 494,
+            "failed": 0,
+            "met_slo": 157,
+            "completed_rate_per_s": 12.2683,
+            "goodput_per_s": 5.234,
+            "output_tokens_per_s": 1570.34,
+            "drain_overshoot": 1.261,
+            "ttft_p50_s": 1.9962764769591352,
+            "ttft_p90_s": 4.380360050234202,
+            "ttft_p95_s": 4.88758094252108,
+            "ttft_p99_s": 5.132330351734364,
+            "tpot_p50_s": 0.03543633514399699,
+            "tpot_p99_s": 0.03556496346399945,
+            "e2e_p50_s": 6.429805017958895,
+            "e2e_p99_s": 9.32419608413808,
+            "max_schedule_lag_s": 0.095569,
+            "ttft_p99_send_clock_s": 5.125967298999967,
+            "slo_attainment": 0.3178,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 73,
+              "peak": {
+                "running": 64.0,
+                "waiting": 71.0,
+                "kv_cache_usage": 0.01631499794923208
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 63232.0,
+              "prompt_tokens_delta": 76570.0,
+              "engine_ttft_p99_cumulative_s": 5.349999999999988,
+              "engine_itl_p99_cumulative_s": 0.04971893380599625,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 37.842,
+              "ttft_step": {
+                "count": 494,
+                "p50_s": 1.9666666666666668,
+                "p99_s": 6.550000000000001,
+                "mean_s": 2.1237036597873518
+              },
+              "queue_time_step": {
+                "count": 494,
+                "p50_s": 1.935483870967742,
+                "p99_s": 5.8833333333333355,
+                "mean_s": 2.037308581556677
+              },
+              "prefill_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.06751818990485786
+              },
+              "decode_time_step": {
+                "count": 494,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.316079578265179
+              },
+              "tpot_step": {
+                "count": 494,
+                "p50_s": 0.037294238683127576,
+                "p99_s": 0.049745884773662555,
+                "mean_s": 0.033984878569017135
+              },
+              "e2e_step": {
+                "count": 494,
+                "p50_s": 6.715425531914894,
+                "p99_s": 9.934308510638298,
+                "mean_s": 6.439834361616899
+              },
+              "requests_completed_step": 494,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 138,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 19.9704,
+            "requested_rate_per_s": 20.0,
+            "wall_clock_s": 45.0263,
+            "sent": 599,
+            "completed": 599,
+            "failed": 0,
+            "met_slo": 92,
+            "completed_rate_per_s": 12.4357,
+            "goodput_per_s": 3.0672,
+            "output_tokens_per_s": 1591.77,
+            "drain_overshoot": 1.501,
+            "ttft_p50_s": 5.757714079366753,
+            "ttft_p90_s": 10.69216888000388,
+            "ttft_p95_s": 10.950218919330037,
+            "ttft_p99_s": 11.591028321209954,
+            "tpot_p50_s": 0.03570691804800299,
+            "tpot_p99_s": 0.03584110979199977,
+            "e2e_p50_s": 10.233854041366914,
+            "e2e_p99_s": 15.446327009918072,
+            "max_schedule_lag_s": 0.093392,
+            "ttft_p99_send_clock_s": 11.590456857999925,
+            "slo_attainment": 0.1536,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 87,
+              "peak": {
+                "running": 64.0,
+                "waiting": 160.0,
+                "kv_cache_usage": 0.017044159868750852
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 76672.0,
+              "prompt_tokens_delta": 92845.0,
+              "engine_ttft_p99_cumulative_s": 18.755797101449268,
+              "engine_itl_p99_cumulative_s": 0.049728738286295655,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 45.041,
+              "ttft_step": {
+                "count": 599,
+                "p50_s": 5.790094339622641,
+                "p99_s": 19.565942028985507,
+                "mean_s": 5.7255560631346025
+              },
+              "queue_time_step": {
+                "count": 599,
+                "p50_s": 5.785024154589372,
+                "p99_s": 14.7604,
+                "mean_s": 5.63772184370951
+              },
+              "prefill_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.06849934188982368
+              },
+              "decode_time_step": {
+                "count": 599,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.382872973020059
+              },
+              "tpot_step": {
+                "count": 599,
+                "p50_s": 0.03739478114478115,
+                "p99_s": 0.049747895622895624,
+                "mean_s": 0.03451081081118156
+              },
+              "e2e_step": {
+                "count": 599,
+                "p50_s": 10.365168539325843,
+                "p99_s": 19.424038461538462,
+                "mean_s": 10.108482855986274
+              },
+              "requests_completed_step": 599,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 226,
+            "held_outside_engine": false
+          }
+        ]
+      }
+    },
+    {
+      "variant": {
+        "name": "max_num_seqs=96",
+        "overrides": {
+          "max_num_seqs": 96
+        }
+      },
+      "slug": "max_num_seqs-96",
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "96",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 102.59087114099975,
+      "error": null,
+      "ok": true,
+      "valid": true,
+      "generator_kept_up": true,
+      "on_frontier": true,
+      "report": {
+        "label": "max_num_seqs=96 - qwen2.5-1.5b on Tesla T4",
+        "slo": {
+          "name": "interactive",
+          "ttft_s": 1.0,
+          "tpot_s": 0.05
+        },
+        "meta": {
+          "model": "qwen2.5-1.5b",
+          "base_url": "http://127.0.0.1:8000/v1",
+          "config": {
+            "rates": [
+              8.0,
+              12.0,
+              16.0,
+              20.0,
+              24.0,
+              28.0,
+              32.0
+            ],
+            "duration_s": 30.0,
+            "workload": {
+              "approx_prompt_tokens": 128,
+              "max_tokens": 128,
+              "temperature": 0.0,
+              "ignore_eos": true
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "seed": 1337,
+            "warmup_requests": 4,
+            "metrics_url": "http://127.0.0.1:8000",
+            "stop_after_unhealthy": 2
+          },
+          "skipped_rates": [
+            28.0,
+            32.0
+          ],
+          "variant": {
+            "name": "max_num_seqs=96",
+            "overrides": {
+              "max_num_seqs": 96
+            }
+          },
+          "engine_command": [
+            "vllm",
+            "serve",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "--served-model-name",
+            "qwen2.5-1.5b",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+            "--dtype",
+            "float16",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "96",
+            "--max-num-batched-tokens",
+            "8192",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--enable-chunked-prefill"
+          ],
+          "engine_self_report": {
+            "lines": [
+              "(EngineCore pid=913) ERROR 09-25 17:46:19 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+              "(EngineCore pid=913) INFO 09-25 17:46:21 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+              "(EngineCore pid=913) INFO 09-25 17:46:34 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/f402a2910c/rank_0_0/backbone for vLLM's torch.compile",
+              "(EngineCore pid=913) INFO 09-25 17:46:47 [monitor.py:53] torch.compile took 19.07 s in total",
+              "(EngineCore pid=913) INFO 09-25 17:46:58 [gpu_worker.py:625] Available KV cache memory: 9.31 GiB",
+              "(EngineCore pid=913) INFO 09-25 17:46:58 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8870 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9130. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+              "(EngineCore pid=913) INFO 09-25 17:46:58 [kv_cache_utils.py:2032] GPU KV cache size: 348,464 tokens, Maximum concurrency for 4,096 tokens per request: 85.07x"
+            ],
+            "attention_backend": "TRITON_ATTN",
+            "kv_cache_tokens": 348464,
+            "kv_cache_memory_gib": 9.31,
+            "max_concurrency": 85.07
+          }
+        },
+        "max_sustainable_rate_per_s": 16.4689,
+        "peak_goodput_per_s": 13.8018,
+        "peak_goodput_at_rate_per_s": 16.4689,
+        "peak_output_tokens_per_s": 1933.38,
+        "peak_throughput_at_rate_per_s": 24.0801,
+        "generator_kept_up": true,
+        "held_outside_engine_at_rates": [],
+        "steps": [
+          {
+            "offered_rate_per_s": 8.246,
+            "requested_rate_per_s": 8.0,
+            "wall_clock_s": 32.7942,
+            "sent": 246,
+            "completed": 246,
+            "failed": 0,
+            "met_slo": 246,
+            "completed_rate_per_s": 7.0728,
+            "goodput_per_s": 7.0728,
+            "output_tokens_per_s": 905.31,
+            "drain_overshoot": 1.099,
+            "ttft_p50_s": 0.07602965093835135,
+            "ttft_p90_s": 0.0897966679853468,
+            "ttft_p95_s": 0.09186706470480743,
+            "ttft_p99_s": 0.09582499206744899,
+            "tpot_p50_s": 0.025946937999997317,
+            "tpot_p99_s": 0.02738869216799867,
+            "e2e_p50_s": 3.315673963337588,
+            "e2e_p99_s": 3.512215101192375,
+            "max_schedule_lag_s": 0.005325,
+            "ttft_p99_send_clock_s": 0.09521670799995263,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 64,
+              "peak": {
+                "running": 33.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.008953990265405443
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 31488.0,
+              "prompt_tokens_delta": 38130.0,
+              "engine_ttft_p99_cumulative_s": 1.5625,
+              "engine_itl_p99_cumulative_s": 0.04958758777255689,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 32.809,
+              "ttft_step": {
+                "count": 246,
+                "p50_s": 0.06816091954022989,
+                "p99_s": 0.09753999999999999,
+                "mean_s": 0.06704321721704995
+              },
+              "queue_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.104054878881034e-05
+              },
+              "prefill_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.051389930223568234
+              },
+              "decode_time_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.1985871187926764
+              },
+              "tpot_step": {
+                "count": 246,
+                "p50_s": 0.030781250000000003,
+                "p99_s": 0.049615625000000003,
+                "mean_s": 0.025185725344824234
+              },
+              "e2e_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.2656021137547686
+              },
+              "requests_completed_step": 246,
+              "settled_in_s": 0.02
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 35,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 12.4697,
+            "requested_rate_per_s": 12.0,
+            "wall_clock_s": 33.4138,
+            "sent": 374,
+            "completed": 374,
+            "failed": 0,
+            "met_slo": 374,
+            "completed_rate_per_s": 10.5026,
+            "goodput_per_s": 10.5026,
+            "output_tokens_per_s": 1344.33,
+            "drain_overshoot": 1.114,
+            "ttft_p50_s": 0.09628694409741456,
+            "ttft_p90_s": 0.11425751010689034,
+            "ttft_p95_s": 0.11890176567142419,
+            "ttft_p99_s": 0.12767038072673742,
+            "tpot_p50_s": 0.03317810727200049,
+            "tpot_p99_s": 0.03502061712800059,
+            "e2e_p50_s": 4.2493744373177,
+            "e2e_p99_s": 4.491331617624262,
+            "max_schedule_lag_s": 0.01693,
+            "ttft_p99_send_clock_s": 0.12614458200005174,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 63.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.015061070805399979
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 47872.0,
+              "prompt_tokens_delta": 57970.0,
+              "engine_ttft_p99_cumulative_s": 0.2401176470588235,
+              "engine_itl_p99_cumulative_s": 0.04969458750891999,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.43,
+              "ttft_step": {
+                "count": 374,
+                "p50_s": 0.0840625,
+                "p99_s": 0.23349999999999996,
+                "mean_s": 0.08295196709148386
+              },
+              "queue_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.2000831538460913e-05
+              },
+              "prefill_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.06353791898665688
+              },
+              "decode_time_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.034883422858282
+              },
+              "tpot_step": {
+                "count": 374,
+                "p50_s": 0.037156593406593406,
+                "p99_s": 0.04974313186813187,
+                "mean_s": 0.03177073561305735
+              },
+              "e2e_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.1178098502643605
+              },
+              "requests_completed_step": 374,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 65,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 16.4689,
+            "requested_rate_per_s": 16.0,
+            "wall_clock_s": 33.5818,
+            "sent": 494,
+            "completed": 494,
+            "failed": 0,
+            "met_slo": 494,
+            "completed_rate_per_s": 13.8018,
+            "goodput_per_s": 13.8018,
+            "output_tokens_per_s": 1766.63,
+            "drain_overshoot": 1.12,
+            "ttft_p50_s": 0.1200703542143815,
+            "ttft_p90_s": 0.15094349552729014,
+            "ttft_p95_s": 0.2624867034510494,
+            "ttft_p99_s": 0.41683380447721774,
+            "tpot_p50_s": 0.039505195328001716,
+            "tpot_p99_s": 0.0418081682560005,
+            "e2e_p50_s": 5.079707924733722,
+            "e2e_p99_s": 5.641033824477116,
+            "max_schedule_lag_s": 0.051665,
+            "ttft_p99_send_clock_s": 0.4163545490000615,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 96.0,
+                "waiting": 5.0,
+                "kv_cache_usage": 0.023693635779226785
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 63232.0,
+              "prompt_tokens_delta": 76570.0,
+              "engine_ttft_p99_cumulative_s": 0.4352499999999992,
+              "engine_itl_p99_cumulative_s": 0.04971864583416202,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.597,
+              "ttft_step": {
+                "count": 494,
+                "p50_s": 0.09707762557077626,
+                "p99_s": 0.46325000000000005,
+                "mean_s": 0.10965895025353682
+              },
+              "queue_time_step": {
+                "count": 494,
+                "p50_s": 0.15122448979591838,
+                "p99_s": 0.29942448979591835,
+                "mean_s": 0.013094759617407595
+              },
+              "prefill_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.07515401185424442
+              },
+              "decode_time_step": {
+                "count": 494,
+                "p50_s": 4.71326164874552,
+                "p99_s": 9.885116279069768,
+                "mean_s": 4.796235927216599
+              },
+              "tpot_step": {
+                "count": 494,
+                "p50_s": 0.037294238683127576,
+                "p99_s": 0.049745884773662555,
+                "mean_s": 0.03776563722217807
+              },
+              "e2e_step": {
+                "count": 494,
+                "p50_s": 5.784982935153583,
+                "p99_s": 9.915699658703073,
+                "mean_s": 4.905984257879528
+              },
+              "requests_completed_step": 494,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 104,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 19.9704,
+            "requested_rate_per_s": 20.0,
+            "wall_clock_s": 36.9836,
+            "sent": 599,
+            "completed": 599,
+            "failed": 0,
+            "met_slo": 241,
+            "completed_rate_per_s": 14.9028,
+            "goodput_per_s": 8.0348,
+            "output_tokens_per_s": 1907.56,
+            "drain_overshoot": 1.233,
+            "ttft_p50_s": 1.720821019173652,
+            "ttft_p90_s": 3.254279651329508,
+            "ttft_p95_s": 3.602783350294473,
+            "ttft_p99_s": 3.8024639886564877,
+            "tpot_p50_s": 0.0422968431679983,
+            "tpot_p99_s": 0.04253582919200198,
+            "e2e_p50_s": 7.027167664437407,
+            "e2e_p99_s": 9.117791533656888,
+            "max_schedule_lag_s": 0.110525,
+            "ttft_p99_send_clock_s": 3.801582486999905,
+            "slo_attainment": 0.4023,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 71,
+              "peak": {
+                "running": 96.0,
+                "waiting": 62.0,
+                "kv_cache_usage": 0.02516300854072917
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 76672.0,
+              "prompt_tokens_delta": 92845.0,
+              "engine_ttft_p99_cumulative_s": 4.805769230769229,
+              "engine_itl_p99_cumulative_s": 0.049729117367196575,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 36.999,
+              "ttft_step": {
+                "count": 599,
+                "p50_s": 1.6341911764705883,
+                "p99_s": 4.932239819004525,
+                "mean_s": 1.6798935370373607
+              },
+              "queue_time_step": {
+                "count": 599,
+                "p50_s": 1.6514084507042253,
+                "p99_s": 4.927657004830918,
+                "mean_s": 1.578660089993329
+              },
+              "prefill_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.0796544332821283
+              },
+              "decode_time_step": {
+                "count": 599,
+                "p50_s": 6.8736951983298535,
+                "p99_s": 9.937473903966598,
+                "mean_s": 5.097063997437365
+              },
+              "tpot_step": {
+                "count": 599,
+                "p50_s": 0.03739478114478115,
+                "p99_s": 0.049747895622895624,
+                "mean_s": 0.04013436218454648
+              },
+              "e2e_step": {
+                "count": 599,
+                "p50_s": 7.20615671641791,
+                "p99_s": 9.944123134328358,
+                "mean_s": 6.7769521540512825
+              },
+              "requests_completed_step": 599,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 162,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 24.0801,
+            "requested_rate_per_s": 24.0,
+            "wall_clock_s": 43.3805,
+            "sent": 719,
+            "completed": 719,
+            "failed": 0,
+            "met_slo": 127,
+            "completed_rate_per_s": 15.1045,
+            "goodput_per_s": 4.2534,
+            "output_tokens_per_s": 1933.38,
+            "drain_overshoot": 1.453,
+            "ttft_p50_s": 4.873049822825859,
+            "ttft_p90_s": 8.236754067600625,
+            "ttft_p95_s": 8.615996816813869,
+            "ttft_p99_s": 9.438278440875724,
+            "tpot_p50_s": 0.042469174312002,
+            "tpot_p99_s": 0.04263973220000116,
+            "e2e_p50_s": 10.192529789888658,
+            "e2e_p99_s": 13.666581173058098,
+            "max_schedule_lag_s": 0.107641,
+            "ttft_p99_send_clock_s": 9.437217076999787,
+            "slo_attainment": 0.1766,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 83,
+              "peak": {
+                "running": 96.0,
+                "waiting": 170.0,
+                "kv_cache_usage": 0.024887501147947466
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 92032.0,
+              "prompt_tokens_delta": 111445.0,
+              "engine_ttft_p99_cumulative_s": 9.500819672131145,
+              "engine_itl_p99_cumulative_s": 0.04977342623035477,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 43.396,
+              "ttft_step": {
+                "count": 719,
+                "p50_s": 4.776490066225166,
+                "p99_s": 9.852663934426229,
+                "mean_s": 4.5062083325896705
+              },
+              "queue_time_step": {
+                "count": 719,
+                "p50_s": 4.738175675675675,
+                "p99_s": 9.89549418604651,
+                "mean_s": 4.402593043482615
+              },
+              "prefill_time_step": {
+                "count": 719,
+                "p50_s": 0.15,
+                "p99_s": 0.29699999999999993,
+                "mean_s": 0.08098554950904666
+              },
+              "decode_time_step": {
+                "count": 719,
+                "p50_s": 7.114767255216694,
+                "p99_s": 9.942295345104334,
+                "mean_s": 5.178261579527128
+              },
+              "tpot_step": {
+                "count": 719,
+                "p50_s": 0.037500000000000006,
+                "p99_s": 0.04975,
+                "mean_s": 0.04077371322462291
+              },
+              "e2e_step": {
+                "count": 719,
+                "p50_s": 10.128726287262873,
+                "p99_s": 14.902574525745257,
+                "mean_s": 9.684501896647319
+              },
+              "requests_completed_step": 719,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 268,
+            "held_outside_engine": false
+          }
+        ]
+      }
+    },
+    {
+      "variant": {
+        "name": "max_num_seqs=128",
+        "overrides": {
+          "max_num_seqs": 128
+        }
+      },
+      "slug": "max_num_seqs-128",
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 102.66599901200016,
+      "error": null,
+      "ok": true,
+      "valid": true,
+      "generator_kept_up": true,
+      "on_frontier": true,
+      "report": {
+        "label": "max_num_seqs=128 - qwen2.5-1.5b on Tesla T4",
+        "slo": {
+          "name": "interactive",
+          "ttft_s": 1.0,
+          "tpot_s": 0.05
+        },
+        "meta": {
+          "model": "qwen2.5-1.5b",
+          "base_url": "http://127.0.0.1:8000/v1",
+          "config": {
+            "rates": [
+              8.0,
+              12.0,
+              16.0,
+              20.0,
+              24.0,
+              28.0,
+              32.0
+            ],
+            "duration_s": 30.0,
+            "workload": {
+              "approx_prompt_tokens": 128,
+              "max_tokens": 128,
+              "temperature": 0.0,
+              "ignore_eos": true
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "seed": 1337,
+            "warmup_requests": 4,
+            "metrics_url": "http://127.0.0.1:8000",
+            "stop_after_unhealthy": 2
+          },
+          "skipped_rates": [
+            28.0,
+            32.0
+          ],
+          "variant": {
+            "name": "max_num_seqs=128",
+            "overrides": {
+              "max_num_seqs": 128
+            }
+          },
+          "engine_command": [
+            "vllm",
+            "serve",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "--served-model-name",
+            "qwen2.5-1.5b",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+            "--dtype",
+            "float16",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "128",
+            "--max-num-batched-tokens",
+            "8192",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--enable-chunked-prefill"
+          ],
+          "engine_self_report": {
+            "lines": [
+              "(EngineCore pid=1109) ERROR 09-25 17:51:06 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+              "(EngineCore pid=1109) INFO 09-25 17:51:08 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+              "(EngineCore pid=1109) INFO 09-25 17:51:20 [backends.py:1094] Using cache directory: /root/.cache/vllm/torch_compile_cache/b082b98067/rank_0_0/backbone for vLLM's torch.compile",
+              "(EngineCore pid=1109) INFO 09-25 17:51:33 [monitor.py:53] torch.compile took 18.95 s in total",
+              "(EngineCore pid=1109) INFO 09-25 17:51:45 [gpu_worker.py:625] Available KV cache memory: 9.21 GiB",
+              "(EngineCore pid=1109) INFO 09-25 17:51:45 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8815 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9185. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+              "(EngineCore pid=1109) INFO 09-25 17:51:45 [kv_cache_utils.py:2032] GPU KV cache size: 344,736 tokens, Maximum concurrency for 4,096 tokens per request: 84.16x"
+            ],
+            "attention_backend": "TRITON_ATTN",
+            "kv_cache_tokens": 344736,
+            "kv_cache_memory_gib": 9.21,
+            "max_concurrency": 84.16
+          }
+        },
+        "max_sustainable_rate_per_s": 16.4689,
+        "peak_goodput_per_s": 13.8018,
+        "peak_goodput_at_rate_per_s": 16.4689,
+        "peak_output_tokens_per_s": 1959.1,
+        "peak_throughput_at_rate_per_s": 24.0801,
+        "generator_kept_up": true,
+        "held_outside_engine_at_rates": [],
+        "steps": [
+          {
+            "offered_rate_per_s": 8.246,
+            "requested_rate_per_s": 8.0,
+            "wall_clock_s": 32.8477,
+            "sent": 246,
+            "completed": 246,
+            "failed": 0,
+            "met_slo": 246,
+            "completed_rate_per_s": 7.0392,
+            "goodput_per_s": 7.0392,
+            "output_tokens_per_s": 901.02,
+            "drain_overshoot": 1.101,
+            "ttft_p50_s": 0.07752135039882724,
+            "ttft_p90_s": 0.09121697196610334,
+            "ttft_p95_s": 0.09467809176691233,
+            "ttft_p99_s": 0.10158423999274113,
+            "tpot_p50_s": 0.0261033034960019,
+            "tpot_p99_s": 0.02793897324799764,
+            "e2e_p50_s": 3.349348168521214,
+            "e2e_p99_s": 3.5800122511607775,
+            "max_schedule_lag_s": 0.013888,
+            "ttft_p99_send_clock_s": 0.09791911599995728,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 64,
+              "peak": {
+                "running": 34.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.009050823857043366
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 31488.0,
+              "prompt_tokens_delta": 38130.0,
+              "engine_ttft_p99_cumulative_s": 1.5625,
+              "engine_itl_p99_cumulative_s": 0.049622450951966754,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 32.863,
+              "ttft_step": {
+                "count": 246,
+                "p50_s": 0.06940540540540541,
+                "p99_s": 0.09803200000000001,
+                "mean_s": 0.06824524325083911
+              },
+              "queue_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.0323337384643236e-05
+              },
+              "prefill_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.05192410931301599
+              },
+              "decode_time_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.23628913519103
+              },
+              "tpot_step": {
+                "count": 246,
+                "p50_s": 0.033730158730158735,
+                "p99_s": 0.04967460317460318,
+                "mean_s": 0.02548259161567739
+              },
+              "e2e_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.3045654859000106
+              },
+              "requests_completed_step": 246,
+              "settled_in_s": 0.02
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 36,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 12.4697,
+            "requested_rate_per_s": 12.0,
+            "wall_clock_s": 33.3853,
+            "sent": 374,
+            "completed": 374,
+            "failed": 0,
+            "met_slo": 374,
+            "completed_rate_per_s": 10.5359,
+            "goodput_per_s": 10.5359,
+            "output_tokens_per_s": 1348.6,
+            "drain_overshoot": 1.113,
+            "ttft_p50_s": 0.09460873907705292,
+            "ttft_p90_s": 0.11202787737722986,
+            "ttft_p95_s": 0.11520196475474798,
+            "ttft_p99_s": 0.1246148404374452,
+            "tpot_p50_s": 0.03281498622399886,
+            "tpot_p99_s": 0.03452154036000138,
+            "e2e_p50_s": 4.201373333288359,
+            "e2e_p99_s": 4.422661452079417,
+            "max_schedule_lag_s": 0.01711,
+            "ttft_p99_send_clock_s": 0.12253380899983313,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 63.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.015177535391042052
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 47872.0,
+              "prompt_tokens_delta": 57970.0,
+              "engine_ttft_p99_cumulative_s": 0.23841379310344823,
+              "engine_itl_p99_cumulative_s": 0.049703237816734754,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.4,
+              "ttft_step": {
+                "count": 374,
+                "p50_s": 0.08107784431137725,
+                "p99_s": 0.23065517241379305,
+                "mean_s": 0.08113370668441854
+              },
+              "queue_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.1136890365874438e-05
+              },
+              "prefill_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.0630655064786305
+              },
+              "decode_time_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.00306412733422
+              },
+              "tpot_step": {
+                "count": 374,
+                "p50_s": 0.037156593406593406,
+                "p99_s": 0.04974313186813187,
+                "mean_s": 0.03152018997900957
+              },
+              "e2e_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.084198006334152
+              },
+              "requests_completed_step": 374,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 64,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 16.4689,
+            "requested_rate_per_s": 16.0,
+            "wall_clock_s": 33.5614,
+            "sent": 494,
+            "completed": 494,
+            "failed": 0,
+            "met_slo": 494,
+            "completed_rate_per_s": 13.8018,
+            "goodput_per_s": 13.8018,
+            "output_tokens_per_s": 1766.63,
+            "drain_overshoot": 1.119,
+            "ttft_p50_s": 0.1157503137624154,
+            "ttft_p90_s": 0.14016266051045534,
+            "ttft_p95_s": 0.14526841611871077,
+            "ttft_p99_s": 0.15879504090343133,
+            "tpot_p50_s": 0.03951383819200055,
+            "tpot_p99_s": 0.04200031554399902,
+            "e2e_p50_s": 5.065831534637688,
+            "e2e_p99_s": 5.403175736443835,
+            "max_schedule_lag_s": 0.02706,
+            "ttft_p99_send_clock_s": 0.1580026229999021,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 101.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.02450684613599441
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 63232.0,
+              "prompt_tokens_delta": 76570.0,
+              "engine_ttft_p99_cumulative_s": 0.24523451327433624,
+              "engine_itl_p99_cumulative_s": 0.04972256040163163,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.578,
+              "ttft_step": {
+                "count": 494,
+                "p50_s": 0.09578059071729958,
+                "p99_s": 0.24623857868020305,
+                "mean_s": 0.09655308723449707
+              },
+              "queue_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.221978946088218e-05
+              },
+              "prefill_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.07523546150202845
+              },
+              "decode_time_step": {
+                "count": 494,
+                "p50_s": 4.71326164874552,
+                "p99_s": 9.885116279069768,
+                "mean_s": 4.800622746020255
+              },
+              "tpot_step": {
+                "count": 494,
+                "p50_s": 0.037294238683127576,
+                "p99_s": 0.049745884773662555,
+                "mean_s": 0.03780017910252175
+              },
+              "e2e_step": {
+                "count": 494,
+                "p50_s": 5.408921933085502,
+                "p99_s": 9.90817843866171,
+                "mean_s": 4.897183196264723
+              },
+              "requests_completed_step": 494,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 104,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 19.9704,
+            "requested_rate_per_s": 20.0,
+            "wall_clock_s": 35.514,
+            "sent": 599,
+            "completed": 599,
+            "failed": 0,
+            "met_slo": 187,
+            "completed_rate_per_s": 14.9028,
+            "goodput_per_s": 5.5677,
+            "output_tokens_per_s": 1907.56,
+            "drain_overshoot": 1.184,
+            "ttft_p50_s": 0.5363384787105172,
+            "ttft_p90_s": 1.485090113856245,
+            "ttft_p95_s": 1.9476246088001474,
+            "ttft_p99_s": 2.2028538319103177,
+            "tpot_p50_s": 0.05245966140000018,
+            "tpot_p99_s": 0.05384753723999893,
+            "e2e_p50_s": 6.839549886193417,
+            "e2e_p99_s": 8.927380312433325,
+            "max_schedule_lag_s": 0.08509,
+            "ttft_p99_send_clock_s": 2.196833654999864,
+            "slo_attainment": 0.3122,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 68,
+              "peak": {
+                "running": 128.0,
+                "waiting": 37.0,
+                "kv_cache_usage": 0.032815038291947096
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 76672.0,
+              "prompt_tokens_delta": 92845.0,
+              "engine_ttft_p99_cumulative_s": 2.380209302325581,
+              "engine_itl_p99_cumulative_s": 0.07348835770685053,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 35.531,
+              "ttft_step": {
+                "count": 599,
+                "p50_s": 0.5043103448275862,
+                "p99_s": 2.457417061611374,
+                "mean_s": 0.6595094406943091
+              },
+              "queue_time_step": {
+                "count": 599,
+                "p50_s": 0.31,
+                "p99_s": 2.2696153846153844,
+                "mean_s": 0.5395508740250371
+              },
+              "prefill_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.09507526283807134
+              },
+              "decode_time_step": {
+                "count": 599,
+                "p50_s": 7.0751953125,
+                "p99_s": 9.94150390625,
+                "mean_s": 6.0649301405225415
+              },
+              "tpot_step": {
+                "count": 599,
+                "p50_s": 0.053297101449275366,
+                "p99_s": 0.0745659420289855,
+                "mean_s": 0.04775535543718544
+              },
+              "e2e_step": {
+                "count": 599,
+                "p50_s": 7.226851851851851,
+                "p99_s": 9.944537037037037,
+                "mean_s": 6.724352051698306
+              },
+              "requests_completed_step": 599,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 169,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 24.0801,
+            "requested_rate_per_s": 24.0,
+            "wall_clock_s": 41.2339,
+            "sent": 719,
+            "completed": 719,
+            "failed": 0,
+            "met_slo": 90,
+            "completed_rate_per_s": 15.3054,
+            "goodput_per_s": 3.0142,
+            "output_tokens_per_s": 1959.1,
+            "drain_overshoot": 1.381,
+            "ttft_p50_s": 3.421478122508134,
+            "ttft_p90_s": 5.723993681864183,
+            "ttft_p95_s": 5.918856098824076,
+            "ttft_p99_s": 6.9190666905975355,
+            "tpot_p50_s": 0.05353376782399937,
+            "tpot_p99_s": 0.0538736075199995,
+            "e2e_p50_s": 10.114939723835882,
+            "e2e_p99_s": 12.391819839638448,
+            "max_schedule_lag_s": 0.09541,
+            "ttft_p99_send_clock_s": 6.913339062999967,
+            "slo_attainment": 0.1252,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 79,
+              "peak": {
+                "running": 128.0,
+                "waiting": 131.0,
+                "kv_cache_usage": 0.03351125551171963
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 92032.0,
+              "prompt_tokens_delta": 111445.0,
+              "engine_ttft_p99_cumulative_s": 7.192424242424241,
+              "engine_itl_p99_cumulative_s": 0.07415943042867565,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 41.249,
+              "ttft_step": {
+                "count": 719,
+                "p50_s": 3.0208333333333335,
+                "p99_s": 7.409217171717171,
+                "mean_s": 3.0203613462302217
+              },
+              "queue_time_step": {
+                "count": 719,
+                "p50_s": 2.94831223628692,
+                "p99_s": 9.782121212121211,
+                "mean_s": 2.8955866027023673
+              },
+              "prefill_time_step": {
+                "count": 719,
+                "p50_s": 0.15,
+                "p99_s": 0.29699999999999993,
+                "mean_s": 0.09967681762865484
+              },
+              "decode_time_step": {
+                "count": 719,
+                "p50_s": 7.296992481203008,
+                "p99_s": 9.945939849624061,
+                "mean_s": 6.343488351396389
+              },
+              "tpot_step": {
+                "count": 719,
+                "p50_s": 0.058200934579439256,
+                "p99_s": 0.07466401869158878,
+                "mean_s": 0.04994872717634952
+              },
+              "e2e_step": {
+                "count": 719,
+                "p50_s": 10.141891891891891,
+                "p99_s": 14.902837837837836,
+                "mean_s": 9.363894125350825
+              },
+              "requests_completed_step": 719,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 262,
+            "held_outside_engine": false
+          }
+        ]
+      }
+    },
+    {
+      "variant": {
+        "name": "baseline-repeat",
+        "overrides": {
+          "max_num_seqs": 256
+        }
+      },
+      "slug": "baseline-repeat",
+      "engine_command": [
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "qwen2.5-1.5b",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--dtype",
+        "float16",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "8192",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill"
+      ],
+      "startup_s": 86.51724760699972,
+      "error": null,
+      "ok": true,
+      "valid": true,
+      "generator_kept_up": true,
+      "on_frontier": true,
+      "report": {
+        "label": "baseline-repeat - qwen2.5-1.5b on Tesla T4",
+        "slo": {
+          "name": "interactive",
+          "ttft_s": 1.0,
+          "tpot_s": 0.05
+        },
+        "meta": {
+          "model": "qwen2.5-1.5b",
+          "base_url": "http://127.0.0.1:8000/v1",
+          "config": {
+            "rates": [
+              8.0,
+              12.0,
+              16.0,
+              20.0,
+              24.0,
+              28.0,
+              32.0
+            ],
+            "duration_s": 30.0,
+            "workload": {
+              "approx_prompt_tokens": 128,
+              "max_tokens": 128,
+              "temperature": 0.0,
+              "ignore_eos": true
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "seed": 1337,
+            "warmup_requests": 4,
+            "metrics_url": "http://127.0.0.1:8000",
+            "stop_after_unhealthy": 2
+          },
+          "skipped_rates": [
+            28.0,
+            32.0
+          ],
+          "variant": {
+            "name": "baseline-repeat",
+            "overrides": {
+              "max_num_seqs": 256
+            }
+          },
+          "engine_command": [
+            "vllm",
+            "serve",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "--served-model-name",
+            "qwen2.5-1.5b",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+            "--dtype",
+            "float16",
+            "--max-model-len",
+            "4096",
+            "--max-num-seqs",
+            "256",
+            "--max-num-batched-tokens",
+            "8192",
+            "--gpu-memory-utilization",
+            "0.9",
+            "--enable-chunked-prefill"
+          ],
+          "engine_self_report": {
+            "lines": [
+              "(EngineCore pid=1303) ERROR 09-25 17:55:49 [fa_utils.py:212] Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8",
+              "(EngineCore pid=1303) INFO 09-25 17:55:51 [cuda.py:492] Using TRITON_ATTN attention backend out of potential backends: ['TRITON_ATTN', 'FLEX_ATTENTION'].",
+              "(EngineCore pid=1303) INFO 09-25 17:55:57 [monitor.py:53] torch.compile took 0.22 s in total",
+              "(EngineCore pid=1303) INFO 09-25 17:56:10 [gpu_worker.py:625] Available KV cache memory: 9.04 GiB",
+              "(EngineCore pid=1303) INFO 09-25 17:56:10 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8765 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9235. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+              "(EngineCore pid=1303) INFO 09-25 17:56:10 [kv_cache_utils.py:2032] GPU KV cache size: 338,512 tokens, Maximum concurrency for 4,096 tokens per request: 82.64x"
+            ],
+            "attention_backend": "TRITON_ATTN",
+            "kv_cache_tokens": 338512,
+            "kv_cache_memory_gib": 9.04,
+            "max_concurrency": 82.64
+          }
+        },
+        "max_sustainable_rate_per_s": 16.4689,
+        "peak_goodput_per_s": 13.8018,
+        "peak_goodput_at_rate_per_s": 16.4689,
+        "peak_output_tokens_per_s": 1980.11,
+        "peak_throughput_at_rate_per_s": 19.9704,
+        "generator_kept_up": true,
+        "held_outside_engine_at_rates": [],
+        "steps": [
+          {
+            "offered_rate_per_s": 8.246,
+            "requested_rate_per_s": 8.0,
+            "wall_clock_s": 32.8415,
+            "sent": 246,
+            "completed": 246,
+            "failed": 0,
+            "met_slo": 246,
+            "completed_rate_per_s": 7.0392,
+            "goodput_per_s": 7.0392,
+            "output_tokens_per_s": 901.02,
+            "drain_overshoot": 1.101,
+            "ttft_p50_s": 0.07722588366099004,
+            "ttft_p90_s": 0.09010085800495204,
+            "ttft_p95_s": 0.09259682161468774,
+            "ttft_p99_s": 0.09735331370537637,
+            "tpot_p50_s": 0.02631087027199828,
+            "tpot_p99_s": 0.02800788131199806,
+            "e2e_p50_s": 3.3742886510804393,
+            "e2e_p99_s": 3.5899545493049736,
+            "max_schedule_lag_s": 0.006234,
+            "ttft_p99_send_clock_s": 0.09651405900012833,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 64,
+              "peak": {
+                "running": 34.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.009169975420684429
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 31488.0,
+              "prompt_tokens_delta": 38130.0,
+              "engine_ttft_p99_cumulative_s": 1.5625,
+              "engine_itl_p99_cumulative_s": 0.04963029620853081,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 32.856,
+              "ttft_step": {
+                "count": 246,
+                "p50_s": 0.06900523560209423,
+                "p99_s": 0.09726666666666667,
+                "mean_s": 0.0682589804253927
+              },
+              "queue_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.088781299756185e-05
+              },
+              "prefill_time_step": {
+                "count": 246,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.052386753174822276
+              },
+              "decode_time_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.2567894988902366
+              },
+              "tpot_step": {
+                "count": 246,
+                "p50_s": 0.03507281553398058,
+                "p99_s": 0.04970145631067961,
+                "mean_s": 0.025644011802285312
+              },
+              "e2e_step": {
+                "count": 246,
+                "p50_s": 3.6970338983050848,
+                "p99_s": 4.973940677966102,
+                "mean_s": 3.3250992046139105
+              },
+              "requests_completed_step": 246,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 36,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 12.4697,
+            "requested_rate_per_s": 12.0,
+            "wall_clock_s": 33.365,
+            "sent": 374,
+            "completed": 374,
+            "failed": 0,
+            "met_slo": 374,
+            "completed_rate_per_s": 10.5359,
+            "goodput_per_s": 10.5359,
+            "output_tokens_per_s": 1348.6,
+            "drain_overshoot": 1.112,
+            "ttft_p50_s": 0.09427580837808591,
+            "ttft_p90_s": 0.10995241200258832,
+            "ttft_p95_s": 0.11371531699047921,
+            "ttft_p99_s": 0.12070809801642213,
+            "tpot_p50_s": 0.03261121182400166,
+            "tpot_p99_s": 0.03421522589600136,
+            "e2e_p50_s": 4.173213018642482,
+            "e2e_p99_s": 4.387073877990375,
+            "max_schedule_lag_s": 0.0699,
+            "ttft_p99_send_clock_s": 0.118868965999809,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 63.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.015314804310833763
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 47872.0,
+              "prompt_tokens_delta": 57970.0,
+              "engine_ttft_p99_cumulative_s": 0.23023529411764698,
+              "engine_itl_p99_cumulative_s": 0.04970473258743776,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.381,
+              "ttft_step": {
+                "count": 374,
+                "p50_s": 0.0811111111111111,
+                "p99_s": 0.21699999999999992,
+                "mean_s": 0.08051800919089087
+              },
+              "queue_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.1061614955945315e-05
+              },
+              "prefill_time_step": {
+                "count": 374,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.06265751739038461
+              },
+              "decode_time_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 3.976200030775398
+              },
+              "tpot_step": {
+                "count": 374,
+                "p50_s": 0.037156593406593406,
+                "p99_s": 0.04974313186813187,
+                "mean_s": 0.03130866165964881
+              },
+              "e2e_step": {
+                "count": 374,
+                "p50_s": 3.75,
+                "p99_s": 4.975,
+                "mean_s": 4.056676036533825
+              },
+              "requests_completed_step": 374,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 63,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 16.4689,
+            "requested_rate_per_s": 16.0,
+            "wall_clock_s": 33.5828,
+            "sent": 494,
+            "completed": 494,
+            "failed": 0,
+            "met_slo": 494,
+            "completed_rate_per_s": 13.8018,
+            "goodput_per_s": 13.8018,
+            "output_tokens_per_s": 1766.63,
+            "drain_overshoot": 1.12,
+            "ttft_p50_s": 0.11640904147662567,
+            "ttft_p90_s": 0.13873296425311565,
+            "ttft_p95_s": 0.1427954853855411,
+            "ttft_p99_s": 0.16264126353828345,
+            "tpot_p50_s": 0.039731405512000495,
+            "tpot_p99_s": 0.04223091874400052,
+            "e2e_p50_s": 5.086117548556031,
+            "e2e_p99_s": 5.41455277907675,
+            "max_schedule_lag_s": 0.019504,
+            "ttft_p99_send_clock_s": 0.15726352299998325,
+            "slo_attainment": 1.0,
+            "keeping_up": true,
+            "healthy": true,
+            "engine": {
+              "samples": 65,
+              "peak": {
+                "running": 102.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.02524106636415202
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 63232.0,
+              "prompt_tokens_delta": 76570.0,
+              "engine_ttft_p99_cumulative_s": 0.24484688995215306,
+              "engine_itl_p99_cumulative_s": 0.049741395041037535,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 33.599,
+              "ttft_step": {
+                "count": 494,
+                "p50_s": 0.09531914893617022,
+                "p99_s": 0.246140625,
+                "mean_s": 0.0960840638349896
+              },
+              "queue_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.154171254324773e-05
+              },
+              "prefill_time_step": {
+                "count": 494,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.0755326313056705
+              },
+              "decode_time_step": {
+                "count": 494,
+                "p50_s": 4.80410447761194,
+                "p99_s": 9.89070796460177,
+                "mean_s": 4.823054149562764
+              },
+              "tpot_step": {
+                "count": 494,
+                "p50_s": 0.0372680412371134,
+                "p99_s": 0.04974536082474227,
+                "mean_s": 0.03797680432726581
+              },
+              "e2e_step": {
+                "count": 494,
+                "p50_s": 5.977198697068404,
+                "p99_s": 9.91954397394137,
+                "mean_s": 4.91915847994538
+              },
+              "requests_completed_step": 494,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 105,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 19.9704,
+            "requested_rate_per_s": 20.0,
+            "wall_clock_s": 34.7406,
+            "sent": 599,
+            "completed": 599,
+            "failed": 0,
+            "met_slo": 224,
+            "completed_rate_per_s": 15.4696,
+            "goodput_per_s": 5.6344,
+            "output_tokens_per_s": 1980.11,
+            "drain_overshoot": 1.158,
+            "ttft_p50_s": 0.17045382927435782,
+            "ttft_p90_s": 0.21635726912849762,
+            "ttft_p95_s": 0.2245423911054889,
+            "ttft_p99_s": 0.239107264293974,
+            "tpot_p50_s": 0.055322282312001335,
+            "tpot_p99_s": 0.06443974845599951,
+            "e2e_p50_s": 7.098283558002482,
+            "e2e_p99_s": 8.264954001802163,
+            "max_schedule_lag_s": 0.034182,
+            "ttft_p99_send_clock_s": 0.2370912269998371,
+            "slo_attainment": 0.374,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 67,
+              "peak": {
+                "running": 179.0,
+                "waiting": 0.0,
+                "kv_cache_usage": 0.044006428436377365
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 76672.0,
+              "prompt_tokens_delta": 92845.0,
+              "engine_ttft_p99_cumulative_s": 0.24716977077363894,
+              "engine_itl_p99_cumulative_s": 0.07379571921978435,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 34.757,
+              "ttft_step": {
+                "count": 599,
+                "p50_s": 0.15812883435582822,
+                "p99_s": 0.24816257668711655,
+                "mean_s": 0.13015062860734078
+              },
+              "queue_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 1.3647943242616875e-05
+              },
+              "prefill_time_step": {
+                "count": 599,
+                "p50_s": 0.15,
+                "p99_s": 0.297,
+                "mean_s": 0.10371137153088027
+              },
+              "decode_time_step": {
+                "count": 599,
+                "p50_s": 7.136711281070745,
+                "p99_s": 9.942734225621415,
+                "mean_s": 6.644823372275491
+              },
+              "tpot_step": {
+                "count": 599,
+                "p50_s": 0.054429945054945056,
+                "p99_s": 0.0745885989010989,
+                "mean_s": 0.05232144387618482
+              },
+              "e2e_step": {
+                "count": 599,
+                "p50_s": 7.17984934086629,
+                "p99_s": 9.943596986817326,
+                "mean_s": 6.7749222240384315
+              },
+              "requests_completed_step": 599,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 184,
+            "held_outside_engine": false
+          },
+          {
+            "offered_rate_per_s": 24.0801,
+            "requested_rate_per_s": 24.0,
+            "wall_clock_s": 37.3597,
+            "sent": 719,
+            "completed": 719,
+            "failed": 0,
+            "met_slo": 75,
+            "completed_rate_per_s": 15.0375,
+            "goodput_per_s": 2.5118,
+            "output_tokens_per_s": 1924.8,
+            "drain_overshoot": 1.251,
+            "ttft_p50_s": 0.2361191440873256,
+            "ttft_p90_s": 0.3334126773775097,
+            "ttft_p95_s": 0.42383978959705715,
+            "ttft_p99_s": 0.8031133615515778,
+            "tpot_p50_s": 0.07751315429599709,
+            "tpot_p99_s": 0.09326673155200114,
+            "e2e_p50_s": 9.994404780596435,
+            "e2e_p99_s": 11.98705825921343,
+            "max_schedule_lag_s": 0.069225,
+            "ttft_p99_send_clock_s": 0.7851704480003718,
+            "slo_attainment": 0.1043,
+            "keeping_up": true,
+            "healthy": false,
+            "engine": {
+              "samples": 71,
+              "peak": {
+                "running": 255.0,
+                "waiting": 15.0,
+                "kv_cache_usage": 0.0630081300813008
+              },
+              "preemptions_delta": 0.0,
+              "generation_tokens_delta": 92032.0,
+              "prompt_tokens_delta": 111445.0,
+              "engine_ttft_p99_cumulative_s": 0.49873239436619676,
+              "engine_itl_p99_cumulative_s": 0.11877704752275013,
+              "baseline_running": 0.0,
+              "baseline_waiting": 0.0,
+              "step_window_s": 37.376,
+              "ttft_step": {
+                "count": 719,
+                "p50_s": 0.17471962616822428,
+                "p99_s": 0.6883823529411757,
+                "mean_s": 0.1947395612533633
+              },
+              "queue_time_step": {
+                "count": 719,
+                "p50_s": 0.15385164051355207,
+                "p99_s": 0.4351249999999993,
+                "mean_s": 0.018140380827529667
+              },
+              "prefill_time_step": {
+                "count": 719,
+                "p50_s": 0.15,
+                "p99_s": 0.29699999999999993,
+                "mean_s": 0.14306274206816164
+              },
+              "decode_time_step": {
+                "count": 719,
+                "p50_s": 9.518156424581006,
+                "p99_s": 14.889384615384614,
+                "mean_s": 9.237840131919329
+              },
+              "tpot_step": {
+                "count": 719,
+                "p50_s": 0.07677648578811369,
+                "p99_s": 0.09953552971576227,
+                "mean_s": 0.07273889867653062
+              },
+              "e2e_step": {
+                "count": 719,
+                "p50_s": 9.917664670658683,
+                "p99_s": 14.898446327683615,
+                "mean_s": 9.43251401890634
+              },
+              "requests_completed_step": 719,
+              "settled_in_s": 0.01
+            },
+            "slo": {
+              "name": "interactive",
+              "ttft_s": 1.0,
+              "tpot_s": 0.05
+            },
+            "client_peak_in_flight": 272,
+            "held_outside_engine": false
+          }
+        ]
+      }
+    }
+  ]
+}
