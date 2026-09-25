@@ -241,3 +241,103 @@ def test_steps_are_ordered_by_rate_regardless_of_insertion_order() -> None:
     report = SweepReport(steps=[step(8, True), step(1, True)], slo=ServiceLevel())
     rates = [s.offered_rate_per_s for s in report.ordered]
     assert rates == sorted(rates)
+
+
+# --- requests the engine never saw -----------------------------------------
+
+
+def engine_peaks(running: float, waiting: float) -> dict:
+    return {"samples": 60, "peak": {"running": running, "waiting": waiting}}
+
+
+def held_step(client_peak: int, running: float, waiting: float = 0.0, rate: float = 2.0):
+    """A step whose client in-flight peak and engine peaks are both stated."""
+    records = [record(i) for i in range(int(rate * 10))]
+    load = result(records, wall=10.0)
+    load.peak_in_flight = client_peak
+    return summarise_step(load, ServiceLevel(), engine_peaks(running, waiting))
+
+
+def test_the_phase4_knee_is_flagged_as_held_outside_the_engine() -> None:
+    """The shape Phase 4 produced and nothing reported.
+
+    The reconstructed client peak at 24 req/s was 284 requests in flight while
+    the engine's peaks read running 100, waiting 0. 184 requests were somewhere
+    between the two - an httpx connection pool - and their wait was being
+    reported as engine TTFT.
+    """
+    summary = held_step(client_peak=284, running=100, waiting=0)
+    assert summary.client_peak_in_flight == 284
+    assert summary.held_outside_engine
+    payload = summary.to_dict()
+    assert payload["client_peak_in_flight"] == 284
+    assert payload["held_outside_engine"] is True
+
+
+def test_a_client_peak_within_sampling_slack_is_not_flagged() -> None:
+    """Engine peaks are sampled every 0.5 s; the margin absorbs what they miss."""
+    # Slack is max(4, 10% of client peak): 11 over at a client peak of 110 is
+    # exactly the margin, and the rule is strictly greater than.
+    assert not held_step(client_peak=110, running=99).held_outside_engine
+    assert held_step(client_peak=110, running=98).held_outside_engine
+    # At small peaks the absolute floor of 4 governs.
+    assert not held_step(client_peak=10, running=6).held_outside_engine
+    assert held_step(client_peak=10, running=5).held_outside_engine
+
+
+def test_queued_requests_count_as_seen_by_the_engine() -> None:
+    """A request in the engine's waiting queue is the scheduler's latency."""
+    assert not held_step(client_peak=200, running=100, waiting=100).held_outside_engine
+
+
+def test_held_outside_engine_is_false_when_either_side_is_unknown() -> None:
+    records = [record(i) for i in range(20)]
+    no_engine = summarise_step(result(records), ServiceLevel())
+    assert no_engine.client_peak_in_flight is not None
+    assert not no_engine.held_outside_engine
+
+    partial = summarise_step(result(records), ServiceLevel(), {"peak": {"running": 1.0}})
+    assert not partial.held_outside_engine
+
+    unknown_client = held_step(client_peak=284, running=100)
+    unknown_client = type(unknown_client)(
+        **{**unknown_client.__dict__, "client_peak_in_flight": None}
+    )
+    assert not unknown_client.held_outside_engine
+
+
+def test_the_client_peak_is_reconstructed_for_steps_that_did_not_record_it() -> None:
+    """Replays of pre-Phase-5 JSONL files have send and finish times, not a peak.
+
+    Overlapping [sent, finished] intervals are the same quantity the live
+    counter measures. Two requests that merely touch do not overlap.
+    """
+    records = [
+        RequestRecord(index=0, scheduled_at_s=0.0, sent_at_s=0.0, finished_at_s=2.0),
+        RequestRecord(index=1, scheduled_at_s=0.5, sent_at_s=0.5, finished_at_s=1.0),
+        RequestRecord(index=2, scheduled_at_s=1.0, sent_at_s=1.0, finished_at_s=3.0),
+        RequestRecord(index=3, scheduled_at_s=4.0, sent_at_s=4.0, finished_at_s=5.0),
+    ]
+    load = result(records, wall=5.0)
+    assert load.peak_in_flight == 0, "a replayed step starts without a recorded peak"
+    assert summarise_step(load, ServiceLevel()).client_peak_in_flight == 2
+
+
+def test_a_summary_built_without_any_records_has_no_client_peak() -> None:
+    assert summarise_step(result([]), ServiceLevel()).client_peak_in_flight is None
+
+
+def test_the_report_lists_and_warns_about_held_rates() -> None:
+    clean = held_step(client_peak=20, running=20, rate=1.0)
+    held = held_step(client_peak=284, running=100, rate=2.0)
+
+    quiet = SweepReport(steps=[clean], slo=ServiceLevel())
+    assert quiet.to_dict()["held_outside_engine_at_rates"] == []
+    assert "WARNING" not in quiet.verdict()
+
+    report = SweepReport(steps=[held, clean], slo=ServiceLevel())
+    assert report.to_dict()["held_outside_engine_at_rates"] == [held.offered_rate_per_s]
+    verdict = report.verdict()
+    assert verdict.startswith("sustains"), "the existing verdict text must be unchanged"
+    assert "WARNING" in verdict
+    assert "outside the engine" in verdict

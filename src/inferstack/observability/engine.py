@@ -24,6 +24,12 @@ settled three of these, two of them against what this module originally assumed:
   request. Both are declared, because a tail in one and not the other says
   different things about the scheduler
 
+The per-phase histograms - ``request_queue_time_seconds``,
+``request_prefill_time_seconds``, ``request_decode_time_seconds`` - were added
+for Phase 5 from the same capture, rather than from documentation, for the same
+reason. The end-to-end histogram keeps its original key, ``e2e_latency``, because
+snapshot JSON already written to artifacts uses it.
+
 A snapshot reports what it could *not* find rather than silently showing a zero
 that looks like an idle server, which is the only reason the missing TPOT was
 visible at all.
@@ -123,11 +129,29 @@ ENGINE_SIGNALS: tuple[Signal, ...] = (
         "histogram",
         "End-to-end request latency",
     ),
+    # The three phases of a request as the scheduler saw them, all confirmed in
+    # the 0.29.0 capture. Together they say *where* a latency went, which the
+    # client cannot: a client-side TTFT of 5 s is one number whether the request
+    # sat in the waiting queue, waited behind a huge prefill, or never left the
+    # client's own connection pool. queue + prefill is the engine's share of
+    # TTFT; if the client's TTFT is much larger, the time went somewhere else.
     Signal(
         "queue_time",
         ("vllm:request_queue_time_seconds",),
         "histogram",
-        "Time queued before the first scheduling step",
+        "Time in the scheduler's WAITING queue before first being scheduled",
+    ),
+    Signal(
+        "prefill_time",
+        ("vllm:request_prefill_time_seconds",),
+        "histogram",
+        "Time in the PREFILL phase: first scheduled to first token",
+    ),
+    Signal(
+        "decode_time",
+        ("vllm:request_decode_time_seconds",),
+        "histogram",
+        "Time in the DECODE phase: first token to last",
     ),
     Signal(
         "prompt_tokens",
@@ -219,6 +243,24 @@ class EngineSnapshot:
         """Inter-token latency. Not a synonym for :attr:`tpot`: this is the gap
         between consecutive tokens, TPOT is that gap averaged over a request."""
         return self.histograms.get("itl")
+
+    @property
+    def e2e_latency(self) -> HistogramView | None:
+        """Arrival at the engine to the last token, as the engine measured it."""
+        return self.histograms.get("e2e_latency")
+
+    @property
+    def queue_time(self) -> HistogramView | None:
+        """Time spent waiting to be scheduled. Zero-ish until the batch is full."""
+        return self.histograms.get("queue_time")
+
+    @property
+    def prefill_time(self) -> HistogramView | None:
+        return self.histograms.get("prefill_time")
+
+    @property
+    def decode_time(self) -> HistogramView | None:
+        return self.histograms.get("decode_time")
 
     @property
     def is_empty(self) -> bool:

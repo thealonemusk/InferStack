@@ -32,12 +32,15 @@ class FakeEngine:
 
     async def chat_stream(self, messages, max_tokens=128, temperature=0.0, **kwargs):
         self.arrivals.append(time.perf_counter() - self.origin)
+        # Numbered on arrival, not after the sleep: two requests that overlap
+        # the sleep would otherwise read the same count, and on a loaded machine
+        # "every third request fails" stopped meaning three failures in nine.
+        index = len(self.arrivals)
         self.extras.append(kwargs.get("extra") or {})
         self.concurrent += 1
         self.max_concurrent = max(self.max_concurrent, self.concurrent)
         try:
             await asyncio.sleep(self.latency_s)
-            index = len(self.arrivals)
             if self.fail_every and index % self.fail_every == 0:
                 return CompletionResult(text="", error="HTTP 500: boom", status_code=500)
             return CompletionResult(
@@ -250,3 +253,38 @@ def test_the_prompt_does_not_invite_a_short_answer() -> None:
     content = Workload().messages()[0]["content"]
     assert "one word" not in content.lower()
     assert "summarise the following in one word" not in content.lower()
+
+
+# --- how many requests this process had outstanding ------------------------
+
+
+async def test_peak_in_flight_counts_what_the_generator_had_outstanding() -> None:
+    """Ten requests 10 ms apart at a server that takes 0.5 s: all ten overlap."""
+    engine = FakeEngine(latency_s=0.5)
+    schedule = ArrivalSchedule(tuple(0.01 * (i + 1) for i in range(10)), rate_per_s=100.0)
+
+    result = await run_open_loop(engine, schedule, Workload(max_tokens=8))  # type: ignore[arg-type]
+
+    assert result.peak_in_flight == 10
+    assert result.peak_in_flight == engine.max_concurrent
+
+
+async def test_peak_in_flight_stays_low_when_requests_do_not_overlap() -> None:
+    engine = FakeEngine(latency_s=0.0)
+    schedule = ArrivalSchedule(tuple(0.05 * (i + 1) for i in range(5)), rate_per_s=20.0)
+
+    result = await run_open_loop(engine, schedule, Workload(max_tokens=8))  # type: ignore[arg-type]
+
+    assert result.peak_in_flight == 1
+
+
+async def test_a_request_that_raises_still_leaves_the_in_flight_count() -> None:
+    class Exploding(FakeEngine):
+        async def chat_stream(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise RuntimeError("boom")
+
+    schedule = ArrivalSchedule((0.01, 0.02), rate_per_s=100.0)
+    result = await run_open_loop(Exploding(), schedule, Workload())  # type: ignore[arg-type]
+
+    assert result.peak_in_flight >= 1
+    assert all(not r.ok for r in result.records)

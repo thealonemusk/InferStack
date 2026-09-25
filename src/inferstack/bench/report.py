@@ -36,6 +36,13 @@ __all__ = ["ServiceLevel", "StepSummary", "SweepReport", "summarise_step"]
 # meet the SLO, for a step to count as healthy.
 KEEPING_UP = 0.95
 
+# How far the client's in-flight peak may exceed the engine's running + waiting
+# peak before the gap is called out: max(absolute, fraction of the client peak).
+# Loose on purpose - the engine is sampled every 0.5 s and can miss a peak the
+# client's exact counter catches.
+HELD_SLACK_ABS = 4
+HELD_SLACK_FRACTION = 0.10
+
 
 @dataclass(frozen=True)
 class ServiceLevel:
@@ -105,6 +112,40 @@ class StepSummary:
     engine: dict[str, Any] = field(default_factory=dict)
     slo: dict[str, Any] = field(default_factory=dict)
 
+    # Most requests the load generator had outstanding at once. None when it is
+    # not known (a summary built from something that did not record it).
+    client_peak_in_flight: int | None = None
+
+    @property
+    def held_outside_engine(self) -> bool:
+        """Were requests in flight that the engine was neither running nor queueing?
+
+        A request the client has sent but the engine does not count is being
+        held somewhere between the two - a connection pool, a proxy, the API
+        server's own accept path - and whatever latency it accrues there is not
+        the scheduler's. Phase 4's knee looked like the engine: running batch
+        99-100, queue zero. It was at least partly httpx's default pool of 100
+        connections, and nothing in the report said so.
+
+        True when the client peak exceeds the engine's peak running + peak
+        waiting by more than ``max(4, 10% of the client peak)``. Engine peaks are
+        sampled every 0.5 s while the client counter is exact, so a short spike
+        can be missed; the margin is deliberately loose so that this fires on a
+        structural gap, not on sampling noise. False whenever either side is
+        unknown.
+        """
+        if self.client_peak_in_flight is None:
+            return False
+        peak = self.engine.get("peak") if isinstance(self.engine, dict) else None
+        if not isinstance(peak, dict):
+            return False
+        running, waiting = peak.get("running"), peak.get("waiting")
+        if running is None or waiting is None:
+            return False
+        engine_seen = float(running) + float(waiting)
+        slack = max(HELD_SLACK_ABS, HELD_SLACK_FRACTION * self.client_peak_in_flight)
+        return self.client_peak_in_flight - engine_seen > slack
+
     @property
     def slo_attainment(self) -> float:
         """Fraction of *sent* requests that met the SLO.
@@ -166,7 +207,40 @@ class StepSummary:
         payload["healthy"] = self.healthy
         payload["engine"] = dict(self.engine)
         payload["slo"] = dict(self.slo)
+        payload["client_peak_in_flight"] = self.client_peak_in_flight
+        payload["held_outside_engine"] = self.held_outside_engine
         return payload
+
+
+def _client_peak_in_flight(result: LoadResult) -> int | None:
+    """The generator's in-flight peak: recorded if present, else reconstructed.
+
+    A live run records it exactly. A step rebuilt from an older JSONL file has
+    no such field, but every record carries its send and finish offsets, and the
+    peak overlap of those intervals is the same quantity measured the same way
+    (the live counter also opens before the send and closes after the finish).
+    Failure placeholders for requests that never returned (index -1) carry no
+    real send time and are left out, so a reconstruction can undercount a step
+    that hit its drain timeout - never overcount.
+    """
+    recorded = getattr(result, "peak_in_flight", None)
+    if recorded:
+        return int(recorded)
+    events: list[tuple[float, int]] = []
+    for r in result.records:
+        if r.index < 0:
+            continue
+        events.append((r.sent_at_s, 1))
+        events.append((r.finished_at_s, -1))
+    if not events:
+        return None
+    # Finishes sort before sends at the same instant: touching is not overlapping.
+    events.sort(key=lambda e: (e[0], e[1]))
+    current = best = 0
+    for _, delta in events:
+        current += delta
+        best = max(best, current)
+    return best
 
 
 def summarise_step(
@@ -225,6 +299,7 @@ def summarise_step(
         ttft_p99_send_clock_s=percentile(ttfts_send, 99),
         engine=engine or {},
         slo=slo.to_dict(),
+        client_peak_in_flight=_client_peak_in_flight(result),
     )
 
 
@@ -281,6 +356,11 @@ class SweepReport:
         """
         return all(step.max_schedule_lag_s < 0.25 for step in self.steps)
 
+    @property
+    def held_outside_engine_at_rates(self) -> list[float]:
+        """Offered rates at which the client had requests the engine never saw."""
+        return [s.offered_rate_per_s for s in self.ordered if s.held_outside_engine]
+
     def to_dict(self) -> dict[str, Any]:
         peak = self.peak_goodput
         throughput = self.peak_throughput
@@ -296,11 +376,24 @@ class SweepReport:
                 throughput.offered_rate_per_s if throughput else None
             ),
             "generator_kept_up": self.generator_kept_up,
+            "held_outside_engine_at_rates": self.held_outside_engine_at_rates,
             "steps": [step.to_dict() for step in self.ordered],
         }
 
     def verdict(self) -> str:
         """One line a human can act on."""
+        text = self._verdict()
+        held = self.held_outside_engine_at_rates
+        if held and self.steps and self.generator_kept_up:
+            rates = ", ".join(f"{rate:.2f}" for rate in held)
+            text += (
+                f"; WARNING: at {rates} req/s the client had more requests in flight "
+                "than the engine was running or queueing, so part of that latency was "
+                "spent outside the engine (connection pool, proxy or API server)"
+            )
+        return text
+
+    def _verdict(self) -> str:
         if not self.steps:
             return "no steps measured"
         if not self.generator_kept_up:

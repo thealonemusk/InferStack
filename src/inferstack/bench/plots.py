@@ -10,16 +10,24 @@ collapses into a single x position.
 The one to look at first is goodput. Throughput says how busy the server was;
 goodput says how much of that work was worth anything. Where the two separate is
 where a capacity number stops being honest.
+
+Two more charts compare engine configurations (Phase 5). The frontier plots one
+point per configuration and connects only the ones nothing else beats on both
+axes; the variants chart overlays every configuration's goodput curve so the
+reason a point sits where it does can be seen rather than inferred.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from inferstack.bench.report import SweepReport
 
-__all__ = ["plot_goodput", "plot_sweep"]
+if TYPE_CHECKING:  # tuning imports report and records; plots must not import it back
+    from inferstack.bench.tuning import TuningReport
+
+__all__ = ["plot_frontier", "plot_goodput", "plot_sweep", "plot_variants"]
 
 # A restrained palette: one colour carries meaning per panel, and the SLO limit
 # is the only red thing on the page.
@@ -301,6 +309,158 @@ def plot_sweep(report: SweepReport, path: Path, title: str | None = None) -> Pat
         ha="left",
     )
     figure.tight_layout(rect=(0, 0.02, 1, 0.96))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(figure)
+    return path
+
+
+# One colour per variant. Ordered so the first few - the ones a reader compares
+# most - are the most distinct; the list cycles past its end.
+VARIANT_COLOURS = (GOOD, ACCENT, WARN, "#2da44e", BAD, "#0969da", "#bf3989", "#57606a")
+
+
+def _slo_caption(report: TuningReport) -> str:
+    slo = report.slo
+    return f"{slo.name} SLO: TTFT<{slo.ttft_s:g}s, TPOT<{slo.tpot_s:g}s"
+
+
+def plot_frontier(report: TuningReport, path: Path, title: str | None = None) -> Path:
+    """Sustainable rate against peak goodput, one point per configuration.
+
+    Frontier points are filled and joined; points something else beats on both
+    axes are filled grey; variants whose generator fell behind are hollow grey,
+    because their position describes the load generator rather than the engine.
+    Variants that never produced a curve cannot be placed and are named in the
+    footer instead of vanishing.
+    """
+    plt = _require_matplotlib()
+    figure, ax = plt.subplots(figsize=(8, 5), dpi=160)
+
+    frontier = report.frontier()
+    on_frontier = {r.variant.name for r in frontier}
+
+    if frontier:
+        ax.plot(
+            [r.sustainable_rate for r in frontier],
+            [r.peak_goodput for r in frontier],
+            color=GOOD,
+            linewidth=1.8,
+            zorder=3,
+            label="frontier",
+        )
+
+    labelled: set[str] = set()
+    for result in report.results:
+        if not result.ok:
+            continue
+        x, y = result.sustainable_rate, result.peak_goodput
+        if not result.valid:
+            style: dict[str, Any] = {
+                "facecolors": "none",
+                "edgecolors": MUTED,
+                "label": "INVALID (generator fell behind)",
+            }
+        elif result.variant.name in on_frontier:
+            style = {"color": GOOD, "label": "on the frontier"}
+        else:
+            style = {"color": MUTED, "label": "dominated"}
+        # One legend entry per kind, not per point.
+        if style["label"] in labelled:
+            style.pop("label")
+        else:
+            labelled.add(style["label"])
+        ax.scatter([x], [y], s=60, linewidths=1.4, zorder=4, **style)
+        ax.annotate(
+            result.variant.name,
+            xy=(x, y),
+            xytext=(6, 4),
+            textcoords="offset points",
+            fontsize=7,
+            color=INK if result.valid else MUTED,
+        )
+
+    _style(
+        ax,
+        title or f"Tuning frontier - {_slo_caption(report)}",
+        "max sustainable rate within the SLO (requests/s)",
+        "peak goodput (requests/s)",
+    )
+    # Anchored at zero - "sustained nothing" is plotted there - with a little
+    # room below it so those points are not cut in half by the axis, and more
+    # on the right for the labels.
+    placed = [r for r in report.results if r.ok]
+    x_top = max((r.sustainable_rate for r in placed), default=0.0) or 1.0
+    y_top = max((r.peak_goodput for r in placed), default=0.0) or 1.0
+    ax.set_xlim(-0.04 * x_top, 1.2 * x_top)
+    ax.set_ylim(-0.04 * y_top, 1.1 * y_top)
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(frameon=False, fontsize=8, loc="lower right")
+
+    footer = report.verdict()
+    failed = [r.variant.name for r in report.results if not r.ok]
+    if failed:
+        footer += f"  |  not plotted (no curve): {', '.join(failed)}"
+    figure.text(0.01, 0.005, footer, fontsize=7, color=MUTED, ha="left", wrap=True)
+    figure.tight_layout(rect=(0, 0.04, 1, 1))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(figure)
+    return path
+
+
+def plot_variants(report: TuningReport, path: Path, title: str | None = None) -> Path:
+    """Goodput against offered rate, one line per configuration.
+
+    Same axes as :func:`plot_goodput`, so a single variant's line here is that
+    chart's goodput curve. Invalid variants are drawn dashed grey: shown, so
+    nothing disappears, but visibly not a measurement of the engine.
+    """
+    plt = _require_matplotlib()
+    figure, ax = plt.subplots(figsize=(8, 4.5), dpi=160)
+
+    colour_index = 0
+    for result in report.results:
+        if result.report is None or not result.ok:
+            continue
+        rates, goodput = _series(result.report, "goodput_per_s")
+        if not rates:
+            continue
+        if result.valid:
+            colour = VARIANT_COLOURS[colour_index % len(VARIANT_COLOURS)]
+            colour_index += 1
+            ax.plot(
+                rates,
+                goodput,
+                color=colour,
+                linewidth=2.2,
+                marker="o",
+                markersize=4,
+                label=result.variant.name,
+                zorder=3,
+            )
+        else:
+            ax.plot(
+                rates,
+                goodput,
+                color=MUTED,
+                linewidth=1.4,
+                linestyle="--",
+                marker="o",
+                markersize=3,
+                label=f"{result.variant.name} (INVALID)",
+                zorder=2,
+            )
+
+    _style(
+        ax,
+        title or f"Goodput by configuration - {_slo_caption(report)}",
+        "offered arrival rate (requests/s)",
+        "goodput (requests/s)",
+    )
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(frameon=False, fontsize=8, loc="upper left")
+    figure.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(path, bbox_inches="tight", facecolor="white")
     plt.close(figure)

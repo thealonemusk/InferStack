@@ -449,3 +449,128 @@ def test_analyse_says_so_when_there_is_nothing_to_analyse(tmp_path: Path) -> Non
     result = runner.invoke(app, ["analyse", str(tmp_path)])
     assert result.exit_code == 1
     assert "rate-" in result.stderr
+
+
+# --- tune-report ------------------------------------------------------------
+
+
+def _tuning_run(root: Path, *, lagging_only: bool = False) -> Path:
+    """Two engine variants on disk, as a tuning kernel leaves them.
+
+    ``_sweep_records`` meets a 1 s TTFT at 2 req/s and misses it (3 s) at
+    8 req/s, so that variant sustains 2 req/s interactive and 8 req/s batch.
+    """
+    from inferstack.bench.tuning import EngineVariant, VariantResult, write_variant
+
+    names = ["lagging"] if lagging_only else ["max_num_seqs=64", "max_num_seqs=256"]
+    for name in names:
+        target = write_variant(
+            root,
+            VariantResult(EngineVariant(name, {"max_num_seqs": 64}), None, ["vllm", "serve"]),
+        )
+        _sweep_records(target / "records")
+        if name == "lagging":
+            for path in (target / "records").glob("rate-*.jsonl"):
+                rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+                for row in rows:
+                    row["sent_at_s"] = row["scheduled_at_s"] + 1.0
+                path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    write_variant(
+        root,
+        VariantResult(EngineVariant("oom", {"max_num_seqs": 4096}), None, error="out of memory"),
+    )
+    return root
+
+
+def test_tune_report_json_is_pure_json_with_both_slos(tmp_path: Path) -> None:
+    run = _tuning_run(tmp_path / "run")
+    result = runner.invoke(app, ["tune-report", str(run), "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = json.loads(result.stdout)  # nothing but the report on stdout
+    interactive, batch = data["reports"]
+    assert interactive["slo"] == {"name": "interactive", "ttft_s": 1.0, "tpot_s": 0.05}
+    assert batch["slo"] == {"name": "batch", "ttft_s": 5.0, "tpot_s": 0.2}
+    rows = {row["name"]: row for row in interactive["variants"]}
+    assert rows["max_num_seqs=64"]["max_sustainable_rate_per_s"] == 2.0
+    assert rows["oom"]["error"] == "out of memory"
+    batch_rows = {row["name"]: row for row in batch["variants"]}
+    assert batch_rows["max_num_seqs=64"]["max_sustainable_rate_per_s"] == 8.0
+    # Identical records, so the two variants tie exactly and both stay.
+    assert sorted(batch["frontier"]) == ["max_num_seqs=256", "max_num_seqs=64"]
+    # --json without --out/--plot writes nothing.
+    assert not (run / "tuning.json").exists()
+
+
+def test_tune_report_custom_slo_and_no_batch(tmp_path: Path) -> None:
+    run = _tuning_run(tmp_path / "run")
+    result = runner.invoke(
+        app,
+        ["tune-report", str(run), "--ttft-slo", "10", "--name", "lenient", "--no-batch", "--json"],
+    )
+    assert result.exit_code == 0, result.stdout
+    (only,) = json.loads(result.stdout)["reports"]
+    assert only["slo"]["name"] == "lenient"
+    assert only["best_sustainable"] is not None
+
+
+def test_tune_report_does_not_judge_batch_twice(tmp_path: Path) -> None:
+    run = _tuning_run(tmp_path / "run")
+    result = runner.invoke(app, ["tune-report", str(run), "--name", "batch", "--json"])
+    assert [r["slo"]["name"] for r in json.loads(result.stdout)["reports"]] == ["batch"]
+
+
+def test_tune_report_renders_tables_and_verdicts(tmp_path: Path) -> None:
+    run = _tuning_run(tmp_path / "run")
+    result = runner.invoke(app, ["tune-report", str(run)])
+    assert result.exit_code == 0, result.stdout
+    assert "interactive SLO" in result.stdout
+    assert "batch SLO" in result.stdout
+    assert "max_num_seqs=64" in result.stdout
+    assert "failed" in result.stdout
+
+
+def test_tune_report_out_writes_markdown_and_json(tmp_path: Path) -> None:
+    run = _tuning_run(tmp_path / "run")
+    out = tmp_path / "report"
+    result = runner.invoke(app, ["tune-report", str(run), "--out", str(out), "--json"])
+
+    assert result.exit_code == 0, result.stdout
+    json.loads(result.stdout)  # paths went to stderr, not stdout
+    written = json.loads((out / "tuning.json").read_text(encoding="utf-8"))
+    assert [r["slo"]["name"] for r in written["reports"]] == ["interactive", "batch"]
+    markdown = (out / "tuning.md").read_text(encoding="utf-8")
+    assert "### interactive SLO" in markdown and "### batch SLO" in markdown
+    assert str(out / "tuning.json") in result.stderr.replace("\n", "")
+
+
+def test_tune_report_plot_writes_charts_per_slo(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    run = _tuning_run(tmp_path / "run")
+    result = runner.invoke(app, ["tune-report", str(run), "--plot"])
+
+    assert result.exit_code == 0, result.stdout
+    for name in (
+        "tuning.json",
+        "tuning.md",
+        "frontier.png",
+        "variants.png",
+        "frontier-batch.png",
+        "variants-batch.png",
+    ):
+        assert (run / name).is_file(), name
+
+
+def test_tune_report_exits_nonzero_when_nothing_is_valid(tmp_path: Path) -> None:
+    run = _tuning_run(tmp_path / "run", lagging_only=True)
+    result = runner.invoke(app, ["tune-report", str(run), "--json"])
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)  # still a report, still pure JSON
+    assert "INVALID" in data["reports"][0]["verdict"]
+    assert "No configuration produced a valid curve" in result.stderr
+
+
+def test_tune_report_says_so_when_there_is_nothing_to_read(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["tune-report", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "variant.json" in result.stderr

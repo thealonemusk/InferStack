@@ -10,6 +10,15 @@ SLO rather than as throughput.
 
 ## Result
 
+> **Correction (Phase 5, 25 Sep 2026).** The generator was capped at 100
+> concurrent connections by httpx's default pool limit; the wait for a pooled
+> connection was invisible to the lag check and was recorded as TTFT. Rebuilt
+> from the records below, the client had 67 / 110 / **284** requests in flight
+> at 12.5 / 16.5 / 24 req/s against an engine batch of 65 / 99 / **100**. The
+> 24 req/s row does not describe the engine, the 16.5 req/s p99 may not, and the
+> zero-queue finding came from a system that could not produce a queue. The
+> table is left as measured; see ADR-0009 and the Phase 5 record.
+
 **16.5 requests per second**, within TTFT < 1 s and TPOT < 50 ms, on one
 free-tier T4 running Qwen2.5-1.5B-Instruct under vLLM 0.29.0. Artifacts:
 `artifacts/curated/phase04/`.

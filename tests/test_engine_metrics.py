@@ -204,7 +204,10 @@ async def test_snapshot_round_trips_through_json(exposition: str) -> None:
     payload = json.loads(json.dumps(snapshot_from_text(exposition, url="u").to_dict()))
     assert payload["values"]["running"] == 8.0
     assert payload["histograms"]["ttft"]["count"] == 9.0
-    assert payload["missing"] == []
+    # The synthetic fixture predates the per-phase histograms added in Phase 5,
+    # so those two are - correctly - reported missing from it. The real capture
+    # is the authority on what exists; see the tests bound to it below.
+    assert payload["missing"] == ["prefill_time", "decode_time"]
 
 
 # --- bound to what a real engine actually emits ---------------------------
@@ -292,3 +295,30 @@ def test_the_real_capture_is_unambiguous_without_a_label_filter(
     snapshot = snapshot_from_text(real_exposition)
     assert not snapshot.is_empty
     assert snapshot.running is not None
+
+
+def test_the_request_phases_are_read_from_a_real_engine(real_exposition: str) -> None:
+    """Queue, prefill and decode: the engine's account of where a request's time
+    went, which the client cannot give. Figures are the capture's own."""
+    snapshot = snapshot_from_text(real_exposition)
+    queue, prefill, decode = snapshot.queue_time, snapshot.prefill_time, snapshot.decode_time
+    e2e = snapshot.e2e_latency
+    assert queue is not None and prefill is not None and decode is not None and e2e is not None
+
+    # One observation per request, in every phase: ten requests were captured.
+    assert queue.count == prefill.count == decode.count == e2e.count == 10.0
+    assert prefill.sum == pytest.approx(1.1926902269998436)
+    assert decode.sum == pytest.approx(8.97916871700022)
+    assert e2e.sum == pytest.approx(10.448294162750244)
+
+
+def test_the_phases_account_for_the_end_to_end_time(real_exposition: str) -> None:
+    """queue + prefill + decode should be e2e, give or take the time a request
+    spends in the frontend before reaching the scheduler. If a vLLM release
+    redefined a phase, this is where it would show."""
+    snapshot = snapshot_from_text(real_exposition)
+    assert snapshot.queue_time is not None and snapshot.prefill_time is not None
+    assert snapshot.decode_time is not None and snapshot.e2e_latency is not None
+    phases = snapshot.queue_time.sum + snapshot.prefill_time.sum + snapshot.decode_time.sum
+    assert phases <= snapshot.e2e_latency.sum
+    assert phases == pytest.approx(snapshot.e2e_latency.sum, rel=0.05)

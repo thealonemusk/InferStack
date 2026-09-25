@@ -3,7 +3,8 @@
 A complete state snapshot. Written to be **pasted into a fresh session** (human
 or AI) so work can resume without re-deriving anything.
 
-**Last updated:** 20 Sep 2026, after Phase 4 — the latency/throughput curve, measured on a T4.
+**Last updated:** 25 Sep 2026, Phase 5 in progress — the harness was found capped at 100
+connections and fixed; the tuning session is running on Kaggle.
 
 ---
 
@@ -26,12 +27,12 @@ recorded as an ADR and every claim backed by a reproducible measurement.
 | `main` | **everything is merged** — Phases 0–4, via PRs #1–#7. 79 commits, 132 files |
 | Start new work from | **`main`**, not from the last phase branch |
 | Phase branches | all five still on GitHub as the per-phase record |
-| Tests | **364**, all passing (2 skip without `promtool`) |
+| Tests | **497**, all passing (2 skip without `promtool`) |
 | Lint | `ruff check` and `ruff format --check` both clean (incl. bandit `S`, blind-except `BLE`) |
-| Types | `mypy` **clean**, 37 source files |
+| Types | `mypy` **clean**, 38 source files |
 | CI | `.github/workflows/ci.yml` — **green**. lint, types, tests on 3.11 + 3.12; the measurement script over real sockets; promtool over config and rules |
 | Phases done | 0, 1, 2, 3, 4 — **all verified on real hardware** |
-| Phase next | **5 — tuning: the two knobs, against the Phase 4 curve** |
+| Phase now | **5 — tuning**, branch `phase-05-tuning` (pushed; draft PR). Code done; GPU session `inferstack-phase05-tune` running |
 
 **This changed on 20 Sep 2026.** Phases 0–4 were reviewed and merged to `main`
 through pull requests, so the repository landing page now shows the real project
@@ -227,6 +228,14 @@ capture replayed as the engine. `artifacts/curated/phase03/stack-verification.js
 
 ### Phase 4 — the curve: 16.5 req/s within an interactive SLO
 
+> **CORRECTED in Phase 5 (ADR-0009).** The generator was capped at 100
+> connections by httpx's default pool; the pool wait was invisible to the lag
+> check and recorded as TTFT. Client peak in flight, rebuilt from the records:
+> 67 / 110 / **284** at 12.5 / 16.5 / 24 req/s, against engine batch 65 / 99 /
+> **100**. Rows ≤ 12.5 req/s stand. **The 24 req/s row, the 5.08 s TTFT, and the
+> "queue stays at zero / binding constraint is compute" conclusions do not
+> describe the engine** — do not quote them. The Phase 5 baseline replaces them.
+
 Kaggle T4, vLLM 0.29.0, Qwen2.5-1.5B fp16. Open-loop Poisson arrivals, eight
 rates, 30 s each, 128 prompt tokens and **exactly** 128 output tokens
 (`ignore_eos`). Artifacts: `artifacts/curated/phase04/`, including every
@@ -298,15 +307,18 @@ src/inferstack/
     kernels/serve_smoke.py   full Phase 1 run, unattended
     kernels/gateway_metrics.py  PHASE 3: engine + gateway + load +
                              scrape both, unattended. ~9 min.
-    kernels/bench_sweep.py   PHASE 4: engine + open-loop rate ladder +
-                             charts, unattended. ~40 min.
-  bench/                   PHASE 4 - complete
+    kernels/bench_sweep.py   PHASE 5: variant loop - start, sweep, stop,
+                             prove GPU free; baseline first + last.
+                             No INFERSTACK_VARIANTS = Phase 4 single run.
+  bench/                   PHASE 4, extended in PHASE 5
     arrivals.py            Poisson schedule, computed before the run
-    load.py                open-loop runner; records BOTH clocks
-    report.py              goodput, SLO attainment, saturation
+    load.py                open-loop runner; BOTH clocks; peak in flight
+    report.py              goodput, SLO attainment, held_outside_engine
     records.py             replay a finished run against another SLO
-    sweep.py               the rate ladder, with engine sampling
-    plots.py               the four panels and the hero chart
+    sweep.py               the ladder; per-step engine histogram deltas;
+                           stop_after_unhealthy
+    tuning.py              PHASE 5: variants, Pareto frontier, load_tuning
+    plots.py               hero chart, four panels, frontier, variants
 deploy/compose/            docker-compose, prometheus.yml, rules/,
                            grafana provisioning + dashboard JSON.
                            VERIFIED by running prometheus + grafana.
@@ -319,10 +331,10 @@ artifacts/curated/         phase01/, phase02/, phase03/ - committed results
 CONTEXT.md                 this file
 docs/PROJECT-GUIDE.md      theory, architecture, defence (1018 lines)
 docs/INTEGRATION.md        how to plug into an existing workflow
-docs/adr/                  ADR-0001..0008
+docs/adr/                  ADR-0001..0009
 docs/REVIEW.md             reading order for the stacked branches
-docs/phases/               phase-00 .. phase-04 records
-tests/                     364 tests
+docs/phases/               phase-00 .. phase-05 records
+tests/                     497 tests
   fixtures/vllm_metrics.txt       SYNTHETIC - hand-computable bucket maths
   fixtures/vllm_metrics_real.txt  CAPTURE from a real vLLM 0.29.0. The
                            authority on names, labels and buckets.
@@ -356,6 +368,12 @@ tests/                     364 tests
   unhealthy step rather than taking the best point on the curve. Sweeps bypass
   the gateway: the subject is engine capacity, and admission control sheds load
   at exactly the rates being characterised.
+- **ADR-0009** — **open-loop means open-loop on the wire; tuning is paired.** The
+  generator's transport never caps concurrency below what the schedule offers;
+  the gateway's upstream pool is sized from admission control. Configurations
+  are compared in one session, engine restarted and GPU proven free between
+  them, baseline run first and last; results are a Pareto frontier, not a
+  winner. Amends ADR-0008.
 - **ADR-0007** — **metrics are pulled per component, and reported as
   distributions.** Prometheus scrapes the gateway and the engine separately; the
   gateway never forwards the engine's metrics (a proxied scrape makes the
@@ -494,6 +512,15 @@ Each cost a real debugging cycle. Re-learning them is pure waste.
     it is falling behind by exactly its own drain time. Rates are per second of
     offered load; health is judged by latency and failures instead.
 
+29. **A library default can close an open loop.** `httpx.AsyncClient()` with no
+    `limits` caps at 100 connections, and a stream holds its connection for its
+    whole life. The 101st request waited in our own pool; `sent_at` was stamped
+    before the wait, so the lag check passed and the wait became "server TTFT".
+    The tell was the engine batch reading 99 and then 100 — a ceiling, not a
+    curve — against a Little's-law estimate of ~170. Check engine concurrency
+    against client concurrency, which the harness now does per step
+    (`held_outside_engine`). The gateway had the same default.
+
 **The meta-lesson, now hit four times** (Phase 1 flag drift, Phase 2 admission
 scope, Phase 2 logging, Phase 3 metric name): *code exercised only by mocks is
 not exercised.* Get to a real integration run early in each phase. Phase 3
@@ -610,11 +637,22 @@ Nothing from Phases 0–3 is outstanding. Everything below is either a later
 phase or a decision, and the three categories are kept apart on purpose —
 lumping them together overstates what is missing.
 
-**Later phases, by design:**
+**Phase 5, in progress:**
 
-- **Nothing is tuned.** Phase 4 mapped the curve for the `colab-t4` profile
-  exactly as Phase 1 left it. No knob has been swept, and the curve says which
-  one to sweep first: `max_num_seqs=256`. Phase 5.
+- **No Phase 5 measurement yet.** Session `thealonemusk/inferstack-phase05-tune`
+  (baseline 256, then 32/64/96/128, then baseline-repeat; rates 8–32) was
+  pushed on 25 Sep 2026. A background job fetches it to `kaggle-out-phase05/`.
+  Then run `inferstack tune-report kaggle-out-phase05/variants --plot`, curate
+  into `artifacts/curated/phase05/`, and rewrite the README headline from the
+  corrected baseline.
+- **`max_num_batched_tokens` not swept.** A second session, same kernel, with
+  `INFERSTACK_VARIANTS` set, holding the best `max_num_seqs` fixed.
+- **Alert thresholds still placeholders**, to be set from the corrected
+  baseline, not from Phase 4.
+- **Unverified on real hardware:** VRAM release between engine restarts,
+  `nvidia-smi` parsing, the killpg escalation, and the session's real duration.
+
+**Later phases, by design:**
 - **One workload, one run per rate.** 128 in, 128 out, greedy, no repeats and
   therefore no error bars. Longer outputs shift the balance toward decode and
   would move every number in the curve.
@@ -655,14 +693,18 @@ lumping them together overstates what is missing.
   it reports the sweep invalid and exits non-zero rather than publishing its own
   limits as the server's. Measured in
   `artifacts/curated/phase04/generator-ceiling.md`.
-- **Queue depth is not always the leading indicator**, whatever ADR-0007 and the
-  Phase 3 docs imply. It is, when `max_num_seqs` is smaller than the batch the
-  GPU can drive. On `colab-t4` it is far larger, so pressure shows up as batch
-  size instead and the queue stays at zero through a goodput collapse.
+- **Whether queue depth is the leading indicator is open again.** Phase 4 said
+  it stayed at zero through a collapse, but the capped generator never let more
+  than 100 requests reach the engine. The Phase 5 baseline answers it.
 
 ---
 
 ## 10. Next step — Phase 5, tuning, with a hypothesis already in hand
+
+> **Status, 25 Sep 2026:** the hypothesis below was drawn from the capped
+> Phase 4 curve and is **unconfirmed**. Everything in this section is built
+> (see `docs/phases/phase-05-tuning.md`). What remains is the GPU result, then
+> the `max_num_batched_tokens` session, then the thresholds.
 
 Branch `phase-05-tuning` from **`main`** — Phases 0–4 are merged, so the stack
 of phase branches is no longer the trunk. Nothing is owed from Phase 4.

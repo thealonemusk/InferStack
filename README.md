@@ -12,6 +12,17 @@ instrument it, then load it until it breaks and write down where.
 
 ## 16.5 requests per second — and the point where more load makes things worse
 
+> **Correction, 25 Sep 2026.** The load generator that produced this curve was
+> capped at 100 concurrent connections by an httpx default, and nothing in it
+> could see the cap. At 24 req/s the client had **284** requests in flight while
+> the engine saw **100** — the rest waited inside the generator, and that wait
+> was recorded as server TTFT. Rows up to 12.5 req/s are unaffected (the engine
+> batch never passed 65). **The 24 req/s row, the five-second TTFT and the
+> "queue depth stayed at zero" finding below do not describe the engine.** The
+> cap is fixed, the harness now detects the whole class of problem, and Phase 5
+> re-measures this baseline in the same GPU session as the configurations it
+> tunes. [How it was found](docs/adr/0009-tuning-is-paired-and-open-loop-on-the-wire.md).
+
 ![Goodput against offered load](artifacts/curated/phase04/goodput.png)
 
 One **free-tier Tesla T4**. Qwen2.5-1.5B-Instruct, vLLM 0.29.0, 128-token
@@ -236,7 +247,7 @@ goodput), the architecture, and every decision with its reasoning.
 | 2 | FastAPI gateway: auth, SSE streaming, timeouts, backpressure | ✅ **done** |
 | 3 | Prometheus + Grafana: TTFT, TPOT, queue depth, KV-cache utilisation | ✅ **done**, verified against a real vLLM |
 | 4 | Benchmark harness: Poisson arrivals, open-loop sweeps, goodput | ✅ **done**, on a T4 |
-| 5 | Continuous batching tuning, latency/throughput Pareto curves | next — and [the curve says where to start](artifacts/curated/phase04/sweep.md) |
+| 5 | Continuous batching tuning, latency/throughput Pareto curves | **in progress** — harness fixed and tuning built; GPU run under way |
 | 6 | AWQ/GPTQ int4, prefix caching, speculative decoding, tensor parallelism | |
 | 7 | Rate limiting, admission control, graceful drain, multi-replica routing | |
 | 8 | SGLang on the identical harness, head to head | |

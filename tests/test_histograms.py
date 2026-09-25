@@ -17,6 +17,7 @@ import pytest
 from inferstack.observability.histograms import (
     HistogramView,
     build_histograms,
+    histogram_delta,
     quantile_from_buckets,
 )
 from inferstack.observability.promtext import parse_exposition
@@ -198,3 +199,113 @@ def test_our_quantiles_match_what_prometheus_computes() -> None:
         # rel=1e-12: the two implementations agree to floating-point noise, not
         # merely to a rounded display value.
         assert ours == pytest.approx(expected, rel=1e-12), metric
+
+
+# --- the difference of two scrapes ---------------------------------------
+#
+# A scrape is cumulative over the engine's life, so a sweep step's own latency
+# distribution is (scrape after) - (scrape before). These defend that
+# subtraction, and the two ways it must refuse to answer.
+
+REAL = FIXTURE.parent / "vllm_metrics_real.txt"
+
+
+def _view(buckets: list[tuple[float, float]], total: float, name: str = "h") -> HistogramView:
+    return HistogramView(name, {}, tuple(buckets), count=buckets[-1][1], sum=total)
+
+
+def test_a_delta_is_the_histogram_of_what_happened_in_between() -> None:
+    """Hand-computable. Before: 2 observations <=1, 4 in total. After: 4 <=1, 10
+    in total. So in between: 2 at or below 1.0 and 4 in (1, 2] - six in all."""
+    earlier = _view([(1.0, 2.0), (2.0, 4.0), (INF, 4.0)], total=3.0)
+    later = _view([(1.0, 4.0), (2.0, 10.0), (INF, 10.0)], total=12.0)
+
+    delta = histogram_delta(later, earlier)
+
+    assert delta is not None
+    assert delta.buckets == ((1.0, 2.0), (2.0, 6.0), (INF, 6.0))
+    assert delta.count == 6.0
+    assert delta.sum == pytest.approx(9.0)
+    assert delta.mean == pytest.approx(1.5)
+    # rank 3 of 6 is the 1st of the 4 observations in (1, 2]: 1 + 1 * (1/4).
+    assert delta.quantile(0.50) == pytest.approx(1.25)
+
+
+def test_a_delta_of_a_scrape_with_itself_is_empty_not_zero_latency() -> None:
+    """No requests in the window: no percentile, rather than a p99 of 0 s."""
+    view = _view([(1.0, 4.0), (2.0, 10.0), (INF, 10.0)], total=12.0)
+    delta = histogram_delta(view, view)
+    assert delta is not None
+    assert delta.count == 0.0
+    assert delta.quantile(0.99) is None
+    assert delta.mean is None
+
+
+def test_a_delta_against_a_fresh_engine_reproduces_the_scrape() -> None:
+    """Subtracting all-zero buckets must change nothing, down to the quantiles."""
+    (ttft,) = build_histograms(
+        parse_exposition(REAL.read_text(encoding="utf-8")), "vllm:time_to_first_token_seconds"
+    )
+    zero = HistogramView(ttft.name, ttft.labels, tuple((b, 0.0) for b, _ in ttft.buckets))
+
+    delta = histogram_delta(ttft, zero)
+
+    assert delta is not None
+    assert delta.count == ttft.count
+    assert delta.quantile(0.99) == ttft.quantile(0.99)
+
+
+def test_a_delta_isolates_one_request_from_a_real_capture() -> None:
+    """The real capture's prefill histogram: nine requests at or below 0.3 s and
+    one in (0.8, 1.0]. Suppose the earlier scrape had seen only the nine fast
+    ones. The window then holds exactly the slow one - and its median is the
+    middle of its bucket, 0.9 s, where the cumulative p50 says the opposite."""
+    (prefill,) = build_histograms(
+        parse_exposition(REAL.read_text(encoding="utf-8")), "vllm:request_prefill_time_seconds"
+    )
+    assert prefill.count == 10.0
+    earlier = HistogramView(
+        prefill.name,
+        prefill.labels,
+        tuple((b, min(c, 9.0)) for b, c in prefill.buckets),
+        count=9.0,
+        sum=0.2,
+    )
+
+    delta = histogram_delta(prefill, earlier)
+
+    assert delta is not None
+    assert delta.count == 1.0
+    assert delta.quantile(0.50) == pytest.approx(0.9)
+    assert delta.sum == pytest.approx(prefill.sum - 0.2)
+    cumulative_p50 = prefill.quantile(0.50)
+    assert cumulative_p50 is not None and cumulative_p50 < 0.3
+
+
+def test_a_counter_reset_yields_no_delta_rather_than_negative_buckets() -> None:
+    """An engine restart between scrapes. Not raised: a sweep that lost its
+    engine mid-step records "no engine numbers" and keeps its other steps."""
+    earlier = _view([(1.0, 4.0), (2.0, 10.0), (INF, 10.0)], total=12.0)
+    restarted = _view([(1.0, 1.0), (2.0, 2.0), (INF, 2.0)], total=1.5)
+    assert histogram_delta(restarted, earlier) is None
+
+
+def test_a_reset_visible_in_one_bucket_only_is_still_a_reset() -> None:
+    """The total grew, but a bucket shrank: counters do not go down."""
+    earlier = _view([(1.0, 4.0), (2.0, 4.0), (INF, 4.0)], total=2.0)
+    later = _view([(1.0, 3.0), (2.0, 9.0), (INF, 9.0)], total=10.0)
+    assert histogram_delta(later, earlier) is None
+
+
+def test_different_bucket_bounds_are_a_programming_error() -> None:
+    earlier = _view([(1.0, 1.0), (INF, 1.0)], total=0.5)
+    later = _view([(1.0, 2.0), (2.0, 3.0), (INF, 3.0)], total=2.0)
+    with pytest.raises(ValueError, match="bucket bounds"):
+        histogram_delta(later, earlier)
+
+
+def test_different_series_names_are_a_programming_error() -> None:
+    a = _view([(1.0, 1.0), (INF, 1.0)], total=0.5, name="a")
+    b = _view([(1.0, 2.0), (INF, 2.0)], total=1.0, name="b")
+    with pytest.raises(ValueError, match="subtract"):
+        histogram_delta(b, a)
