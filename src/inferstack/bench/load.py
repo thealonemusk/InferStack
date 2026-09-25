@@ -20,6 +20,15 @@ from the send, which is what the server was responsible for;
 *due*, which is what the user experienced. The gap between them is
 :attr:`RequestRecord.schedule_lag_s`, and reporting it is what lets a reader
 decide whether the generator was a bottleneck instead of taking our word for it.
+
+**Schedule lag does not see everything.** A request is "sent" when it is handed
+to the HTTP client, and a client that waits for a pooled connection before
+writing a byte hides that wait inside the send clock, where it reads as server
+TTFT. Phase 4's knee was at least partly exactly this: httpx's default pool of
+100 connections against an engine whose running batch then peaked at 99-100.
+So each step also records :attr:`LoadResult.peak_in_flight` - the most requests
+this process had outstanding at once - which the report compares against what
+the engine says it was running and queueing.
 """
 
 from __future__ import annotations
@@ -164,6 +173,10 @@ class LoadResult:
     records: list[RequestRecord]
     wall_clock_s: float
     started_at: float
+    # Most requests this process had outstanding at once. Compared against the
+    # engine's own running + waiting peaks, a large surplus means requests were
+    # held somewhere in between - see StepSummary.held_outside_engine.
+    peak_in_flight: int = 0
 
     @property
     def completed(self) -> list[RequestRecord]:
@@ -183,6 +196,27 @@ class LoadResult:
         return max((r.schedule_lag_s for r in self.records), default=0.0)
 
 
+class _InFlight:
+    """Requests handed to the client and not yet recorded, and the most ever.
+
+    Single event loop, no awaits between read and write: a plain counter is
+    exact without a lock.
+    """
+
+    __slots__ = ("current", "peak")
+
+    def __init__(self) -> None:
+        self.current = 0
+        self.peak = 0
+
+    def enter(self) -> None:
+        self.current += 1
+        self.peak = max(self.peak, self.current)
+
+    def exit(self) -> None:
+        self.current -= 1
+
+
 async def _one_request(
     client: EngineClient,
     workload: Workload,
@@ -190,8 +224,28 @@ async def _one_request(
     scheduled_at_s: float,
     origin: float,
     records: list[RequestRecord],
+    in_flight: _InFlight | None = None,
 ) -> None:
     """Send one request and append its record. Never raises into the runner."""
+    if in_flight is not None:
+        in_flight.enter()
+    try:
+        await _send_and_record(client, workload, index, scheduled_at_s, origin, records)
+    finally:
+        # In a finally so a request cancelled at the drain timeout still leaves
+        # the count; its failure record is appended by the runner instead.
+        if in_flight is not None:
+            in_flight.exit()
+
+
+async def _send_and_record(
+    client: EngineClient,
+    workload: Workload,
+    index: int,
+    scheduled_at_s: float,
+    origin: float,
+    records: list[RequestRecord],
+) -> None:
     sent_at = time.perf_counter() - origin
     try:
         result: CompletionResult = await client.chat_stream(
@@ -253,6 +307,7 @@ async def run_open_loop(
     """
     records: list[RequestRecord] = []
     tasks: list[asyncio.Task[None]] = []
+    in_flight = _InFlight()
     origin = time.perf_counter()
 
     for index, offset in enumerate(schedule.offsets):
@@ -260,7 +315,9 @@ async def run_open_loop(
         if offset > now:
             await asyncio.sleep(offset - now)
         tasks.append(
-            asyncio.create_task(_one_request(client, workload, index, offset, origin, records))
+            asyncio.create_task(
+                _one_request(client, workload, index, offset, origin, records, in_flight)
+            )
         )
         if on_progress is not None and index % 25 == 0:
             on_progress(index, len(schedule))
@@ -291,4 +348,5 @@ async def run_open_loop(
         records=records,
         wall_clock_s=time.perf_counter() - origin,
         started_at=time.time(),
+        peak_in_flight=in_flight.peak,
     )
